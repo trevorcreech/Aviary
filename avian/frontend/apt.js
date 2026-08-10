@@ -1929,11 +1929,18 @@
 
   function setReferenceState(state) {
     var btn = document.getElementById('modalReferenceAudio');
+    var wrap = document.getElementById('modalReferenceWrap');
     if (!btn) return;
     btn.dataset.state = state || 'idle';
+    if (wrap) wrap.dataset.state = state || 'idle';
     var playing = state === 'playing';
     btn.setAttribute('aria-pressed', playing ? 'true' : 'false');
     btn.setAttribute('aria-label', playing ? 'Pause reference bird sound' : 'Play reference bird sound');
+  }
+
+  function setReferenceStoppedState() {
+    var wrap = document.getElementById('modalReferenceWrap');
+    setReferenceState(wrap && wrap.matches(':hover') ? 'stopped' : 'idle');
   }
 
   function stopReferenceAudio() {
@@ -1942,7 +1949,7 @@
       try { referenceAudio.pause(); } catch (e) { }
       referenceAudio = null;
     }
-    setReferenceState('idle');
+    setReferenceStoppedState();
   }
 
   function renderReferenceRecording(sci, recording) {
@@ -2440,7 +2447,7 @@
     if (referenceAudio && !referenceAudio.paused) {
       referenceAudio.pause();
       audioRelease(stopReferenceAudio);
-      setReferenceState('idle');
+      setReferenceStoppedState();
       return;
     }
     if (!referenceAudio) {
@@ -2448,7 +2455,7 @@
       referenceAudio.preload = 'metadata';
       referenceAudio.addEventListener('playing', function () { setReferenceState('playing'); });
       referenceAudio.addEventListener('pause', function () {
-        if (referenceAudio && !referenceAudio.ended) setReferenceState('idle');
+        if (referenceAudio && !referenceAudio.ended) setReferenceStoppedState();
       });
       referenceAudio.addEventListener('ended', stopReferenceAudio);
       referenceAudio.addEventListener('error', function () {
@@ -2462,6 +2469,10 @@
       stopReferenceAudio();
       btn.title = 'Reference recording unavailable';
     });
+  });
+
+  document.getElementById('modalReferenceWrap').addEventListener('pointerleave', function () {
+    if (this.dataset.state === 'stopped') setReferenceState('idle');
   });
 
   // Expose for debugging during dev - also lets the modal be opened
