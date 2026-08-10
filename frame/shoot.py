@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Screenshot the live AvianVisitors collage for the e-ink frame.
 
-Loads the real site (the LAN default http://birdnet.local, or a forwarded
+Loads the real site (the LAN default http://aviary.local, or a forwarded
 public URL) at a portrait viewport, hides the controls, sets the frame
 titles, and rewrites a few of the page's own apt.js tunables at capture time
 (cluster bias, count-to-size exponent, a rare-bird floor). The result is the
@@ -257,14 +257,14 @@ def shoot_birdweather(out, species, *, title=None, subtitle=None, timeout_ms=450
                  ("empty_text", "no recent detections nearby")):
         look.setdefault(k, v)
     return shoot(f"http://127.0.0.1:{port}/", out,
-                 title=title or "Avian Visitors", subtitle=subtitle or "Heard Today",
+                 title=title or "Aviary", subtitle=subtitle or "Heard Today",
                  species=species, cutout_base=RAW_ILLUSTRATIONS, cutout_local=cutout_local,
                  timeout_ms=timeout_ms, **look)
 
 
 def main():
     ap = argparse.ArgumentParser(description="Screenshot the AvianVisitors collage for the e-ink frame.")
-    ap.add_argument("--url", default="http://birdnet.local")
+    ap.add_argument("--url", default="http://aviary.local")
     ap.add_argument("--out", default="frame.png")
     ap.add_argument("--title")
     ap.add_argument("--subtitle")

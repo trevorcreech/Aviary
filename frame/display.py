@@ -40,7 +40,7 @@ SPECTRA6 = [(236, 234, 223), (26, 26, 28), (165, 60, 56),
             (198, 176, 74), (49, 71, 130), (58, 110, 72)]
 
 DEFAULTS = {
-    "base_url": "http://birdnet.local",
+    "base_url": "http://aviary.local",
     "species_source": "",   # "" = the recent API at base_url; "birdweather" = BirdWeather near a ZIP
     "zip": "",              # BirdWeather ZIP / postal code (with species_source = "birdweather")
     "bw_days": 7,           # BirdWeather lookback window, in days

@@ -1,4 +1,4 @@
-# AvianVisitors e-ink frame
+# Aviary e-ink frame
 
 *The last 24h of birds, framed on the wall by your window.*
 
@@ -50,14 +50,14 @@ Then install in Pi and power up.
 ```bash
 ssh <your-username>@birdpic.local
 sudo apt update && sudo apt install -y git
-git clone https://github.com/Twarner491/AvianVisitors
-cd AvianVisitors/frame
+git clone https://github.com/trevorcreech/Aviary
+cd Aviary/frame
 ```
 
 Pick how the frame gets its birds:
 
 ```bash
-# Pair with your bird mic on the same network (birdnet.local). The default.
+# Pair with your bird mic on the same network (aviary.local). The default.
 ./install.sh
 
 # No microphone: draw the collage from BirdWeather for any ZIP code.

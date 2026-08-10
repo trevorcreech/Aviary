@@ -1,5 +1,5 @@
 [Unit]
-Description=AvianVisitors MQTT bridge
+Description=Aviary MQTT bridge
 After=network-online.target
 
 [Service]

@@ -1,6 +1,6 @@
 # Forwarding
 
-Default install hosts the collage at `http://birdnet.local/` on your LAN, no auth. The recipes below are independent. Pick what you need.
+This Aviary install hosts the collage at `http://aviary.local/` on your LAN, no auth. The recipes below are independent. Pick what you need.
 
 ---
 
@@ -36,7 +36,7 @@ Add to `configuration.yaml`:
 
 ```yaml
 rest:
-  - resource: http://birdnet.local/avian/api/birdnet-api.php?action=recent&hours=1
+  - resource: http://aviary.local/avian/api/birdnet-api.php?action=recent&hours=1
     scan_interval: 60
     sensor:
       - name: "Latest Bird"

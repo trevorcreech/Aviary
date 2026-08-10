@@ -11,7 +11,7 @@ PORT = 1883
 USER = ""
 PASSWORD = ""
 TOPIC_PREFIX = "birdnet"
-PI_URL = "http://birdnet.local/avian/api/birdnet-api.php?action=recent&hours=1"
+PI_URL = "http://aviary.local/avian/api/birdnet-api.php?action=recent&hours=1"
 
 seen_keys: set[str] = set()
 

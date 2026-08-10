@@ -1,0 +1,3 @@
+# Aviary's recording-delete API may invoke only the fixed helper. The helper
+# accepts one validated recording basename and derives every path server-side.
+caddy ALL=(root) NOPASSWD: /usr/local/sbin/aviary-delete-recording --file *

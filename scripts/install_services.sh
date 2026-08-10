@@ -379,6 +379,22 @@ caddy ALL=(root) NOPASSWD: \\
 EOF
     chmod 0440 /etc/sudoers.d/020_avian-admin
     visudo -c -f /etc/sudoers.d/020_avian-admin >/dev/null
+
+    echo "Installing Aviary false-positive quarantine helper"
+    install -o root -g root -m 0755 \
+      "$my_dir/avian/scripts/delete_recording.py" \
+      /usr/local/sbin/aviary-delete-recording
+    install -o root -g root -m 0440 \
+      "$my_dir/avian/030-aviary-recording-delete.sudoers" \
+      /etc/sudoers.d/030-aviary-recording-delete
+    visudo -c -f /etc/sudoers.d/030-aviary-recording-delete >/dev/null
+    if [ -n "$CADDY_PWD" ] && [ ! -f /etc/aviary/delete-password.hash ]; then
+      install -d -o root -g caddy -m 0750 /etc/aviary
+      printf '%s' "$CADDY_PWD" | php -r \
+        '$p = stream_get_contents(STDIN); file_put_contents("/etc/aviary/delete-password.hash", password_hash($p, PASSWORD_DEFAULT) . PHP_EOL);'
+      chown root:caddy /etc/aviary/delete-password.hash
+      chmod 0640 /etc/aviary/delete-password.hash
+    fi
   fi
 }
 

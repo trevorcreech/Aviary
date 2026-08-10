@@ -56,7 +56,7 @@
   // Each view's title text. The shared static-head shows one of these
   // based on the current view; identical adjacent values mean the title
   // stays put with no fade (collage and stats both say Heard Recently).
-  var VIEW_TITLES = ['Heard Recently', 'Heard Recently', 'Avian Visitors'];
+  var VIEW_TITLES = ['Heard Recently', 'Heard Recently', 'Aviary'];
   var staticHead = document.querySelector('.static-head');
   var staticTitle = document.getElementById('staticTitle');
   function setTitleForView(i) {
@@ -888,6 +888,9 @@
 
   // Map sci -> all-time detection count, populated from lifelist for atlas.
   var speciesTotals = {};
+  // Admin credentials are deliberately session-memory only. They are never
+  // written to localStorage, cookies, or the DOM.
+  var deleteAdminPassword = null;
 
   function fetchJson(url) {
     return fetch(url, { cache: 'no-store' })
@@ -1140,6 +1143,14 @@
   // Tiny inline icons - monochrome, ink-only, match the page palette.
   var ICON_PLAY = '<svg viewBox="0 0 12 12" fill="currentColor"><path d="M3 2 L10 6 L3 10 Z"/></svg>';
   var ICON_PAUSE = '<svg viewBox="0 0 12 12" fill="currentColor"><rect x="3" y="2" width="2.5" height="8"/><rect x="6.5" y="2" width="2.5" height="8"/></svg>';
+  var ICON_TRASH = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4.5h10M6 4.5V3h4v1.5M5 6.5l.5 6h5l.5-6M7 7v4M9 7v4"/></svg>';
+
+  function escapeHtml(value) {
+    return String(value == null ? '' : value)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
 
   function renderAtlas(animate) {
     var grid = document.getElementById('atlasGrid');
@@ -1505,6 +1516,7 @@
       credentials: 'same-origin',
     }).then(function (r) {
       if (r.status === 200) {
+        deleteAdminPassword = p;
         return r.json().then(function (j) { renderMenu(j.items || []); });
       } else if (r.status === 401) {
         lockHint.textContent = 'wrong password.';
@@ -1912,6 +1924,84 @@
   var WIKI_CACHE = {};
   var modalAudio = null;
   var modalRecBtn = null;
+
+  function renderModalSpecies(sci, j) {
+    if ((document.getElementById('modalSci').textContent || '').trim() !== sci) return;
+    var s = j.summary || {};
+    document.getElementById('modalCommon').textContent = s.com || sci;
+    document.getElementById('modalAllTime').textContent = (+s.total || 0).toLocaleString();
+    var winRow = ((DATA.recent && DATA.recent.species) || []).filter(function (x) { return x.sci === sci; })[0];
+    document.getElementById('modalWindow').textContent = (winRow ? +winRow.n : 0).toLocaleString();
+    document.getElementById('modalFirstSeen').textContent = s.first_seen ? fmtRecTime(s.first_seen.split(' ')[0], s.first_seen.split(' ')[1]) : '-';
+    var rar = rarityLabel(+s.total || 0, s.first_seen);
+    var rarEl = document.getElementById('modalRarity');
+    rarEl.textContent = rar;
+    rarEl.classList.toggle('rare', rar === 'rare');
+    var dets = j.detections || [];
+    document.getElementById('modalRecCount').textContent = dets.length + ' captured';
+    document.getElementById('modalRecordings').innerHTML = dets.length
+      ? dets.map(function (d) {
+        return '<li class="rec-row" data-file="' + escapeHtml(d.file) + '" data-date="' + escapeHtml(d.d) + '">'
+          + '<button class="play" type="button" aria-label="play">' + ICON_PLAY + '</button>'
+          + '<span class="when">' + escapeHtml(fmtRecTime(d.d, d.t)) + '<small>' + escapeHtml(fmtDateLine(d.d, d.t)) + '</small></span>'
+          + '<span class="conf">' + ((+d.conf || 0) * 100).toFixed(0) + '%</span>'
+          + '<button class="rec-delete" type="button" aria-label="delete false positive" title="delete false positive">' + ICON_TRASH + '</button>'
+          + '<div class="rec-spectro" aria-hidden="true">'
+          + '<div class="rec-spectro-loading">loading spectrogram...</div>'
+          + '<div class="rec-spectro-played"></div>'
+          + '<div class="rec-spectro-cursor"></div>'
+          + '<div class="rec-spectro-scrub" role="slider" aria-label="scrub" tabindex="0"></div>'
+          + '</div>'
+          + '</li>';
+      }).join('')
+      : '<li class="rec-empty">No recordings yet.</li>';
+  }
+
+  function deleteModalRecording(button) {
+    var row = button.closest('.rec-row');
+    var file = row && row.dataset.file;
+    var sci = (document.getElementById('modalSci').textContent || '').trim();
+    if (!file || !sci) return;
+    if (!window.confirm('Delete this false positive from Aviary?\n\nThe recording will be moved to a private, recoverable quarantine.')) return;
+
+    if (!deleteAdminPassword) {
+      var password = window.prompt('Enter the Aviary admin password to delete this recording:');
+      if (password === null) return;
+      deleteAdminPassword = password;
+    }
+
+    row.classList.add('deleting');
+    button.disabled = true;
+    fetch('./avian/api/recording-delete.php', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', 'X-Aviary-Password': deleteAdminPassword },
+      body: JSON.stringify({ file: file })
+    }).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (j) {
+        if (!r.ok) {
+          if (r.status === 401) deleteAdminPassword = null;
+          throw new Error(j.error || ('delete failed (' + r.status + ')'));
+        }
+        return j;
+      });
+    }).then(function () {
+      if (modalRecBtn && modalRecBtn.closest('.rec-row') === row) stopModalAudio();
+      delete _decodedCache[file];
+      delete SPECIES_CACHE[sci];
+      return refreshAll(false).then(function () {
+        return fetchJson('./avian/api/birdnet-api.php?action=species&sci=' + encodeURIComponent(sci));
+      });
+    }).then(function (j) {
+      SPECIES_CACHE[sci] = j;
+      renderModalSpecies(sci, j);
+    }).catch(function (err) {
+      row.classList.remove('deleting');
+      button.disabled = false;
+      window.alert(err && err.message ? err.message : 'Unable to delete recording.');
+    });
+  }
+
   function fmtRecTime(d, t) {
     // d="2026-05-15", t="20:25:29"
     if (!d) return '-';
@@ -2118,33 +2208,7 @@
         return j;
       });
     loadSpecies.then(function (j) {
-      var s = j.summary || {};
-      document.getElementById('modalCommon').textContent = s.com || sci;
-      document.getElementById('modalAllTime').textContent = (+s.total || 0).toLocaleString();
-      var winRow = ((DATA.recent && DATA.recent.species) || []).filter(function (x) { return x.sci === sci; })[0];
-      document.getElementById('modalWindow').textContent = (winRow ? +winRow.n : 0).toLocaleString();
-      document.getElementById('modalFirstSeen').textContent = s.first_seen ? fmtRecTime(s.first_seen.split(' ')[0], s.first_seen.split(' ')[1]) : '-';
-      var rar = rarityLabel(+s.total || 0, s.first_seen);
-      var rarEl = document.getElementById('modalRarity');
-      rarEl.textContent = rar;
-      if (rar === 'rare') rarEl.classList.add('rare');
-      var dets = j.detections || [];
-      document.getElementById('modalRecCount').textContent = dets.length + ' captured';
-      document.getElementById('modalRecordings').innerHTML = dets.length
-        ? dets.map(function (d) {
-          return '<li class="rec-row" data-file="' + (d.file || '') + '" data-date="' + (d.d || '') + '">'
-            + '<button class="play" type="button" aria-label="play">' + ICON_PLAY + '</button>'
-            + '<span class="when">' + fmtRecTime(d.d, d.t) + '<small>' + fmtDateLine(d.d, d.t) + '</small></span>'
-            + '<span class="conf">' + ((+d.conf || 0) * 100).toFixed(0) + '%</span>'
-            + '<div class="rec-spectro" aria-hidden="true">'
-            + '<div class="rec-spectro-loading">loading spectrogram...</div>'
-            + '<div class="rec-spectro-played"></div>'
-            + '<div class="rec-spectro-cursor"></div>'
-            + '<div class="rec-spectro-scrub" role="slider" aria-label="scrub" tabindex="0"></div>'
-            + '</div>'
-            + '</li>';
-        }).join('')
-        : '<li class="rec-empty">No recordings yet.</li>';
+      renderModalSpecies(sci, j);
     }).catch(function () {
       document.getElementById('modalRecordings').innerHTML = '<li class="rec-empty">Failed to load recordings.</li>';
     });
@@ -2611,7 +2675,7 @@
         + '</div>';
     }
     html += deployCard('pull latest from github',
-      'fetches the newest AvianVisitors + BirdNET-Pi changes; the symlinks already in /BirdSongs/Extracted/ pick up new code on the next request.',
+      'fetches the newest Aviary + BirdNET-Pi changes; the symlinks already in /BirdSongs/Extracted/ pick up new code on the next request.',
       [
         'cd ~/BirdNET-Pi && git pull',
         '# substitute the right php-fpm unit if your debian ships a different version:',
@@ -2946,6 +3010,12 @@
     if (!ev.target.closest) return;
     // Scrub-region clicks are handled by the mousedown wiring below.
     if (ev.target.closest('.rec-spectro-scrub')) return;
+
+    var deleteBtn = ev.target.closest('.rec-delete');
+    if (deleteBtn) {
+      deleteModalRecording(deleteBtn);
+      return;
+    }
 
     var playBtn = ev.target.closest('.play');
     if (playBtn) {

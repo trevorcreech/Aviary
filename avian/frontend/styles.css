@@ -1424,7 +1424,7 @@
     padding-right: 4px;
   }
   .rec-row {
-    display: grid; grid-template-columns: 30px 1fr auto; gap: 10px;
+    display: grid; grid-template-columns: 30px 1fr auto 28px; gap: 10px;
     align-items: center;
     padding: 6px 10px; border-radius: 6px;
     background: var(--paper);
@@ -1432,7 +1432,7 @@
     transition: background 160ms ease;
   }
   .rec-row:hover { background: var(--paper-2); }
-  .rec-row.expanded { grid-template-columns: 30px 1fr auto; }
+  .rec-row.expanded { grid-template-columns: 30px 1fr auto 28px; }
   /* Spectrogram strip - inline below the row header. Click on the row
      toggles open/closed independent of playback so you can scan
      spectrograms visually without listening. */
@@ -1532,6 +1532,20 @@
     color: var(--ink-soft); letter-spacing: 0.06em;
     font-variant-numeric: tabular-nums;
   }
+  .rec-row .rec-delete {
+    width: 24px; height: 24px; padding: 0;
+    display: inline-flex; align-items: center; justify-content: center;
+    border: 0; border-radius: 999px;
+    background: transparent; color: var(--ink-soft);
+    cursor: pointer; transition: color 140ms ease, background 140ms ease;
+  }
+  .rec-row .rec-delete svg { width: 13px; height: 13px; }
+  .rec-row .rec-delete:hover,
+  .rec-row .rec-delete:focus-visible {
+    color: var(--accent-2); background: var(--paper-2); outline: none;
+    box-shadow: var(--raised);
+  }
+  .rec-row.deleting { opacity: 0.55; pointer-events: none; }
   .rec-empty {
     padding: 14px;
     font: 11px/1.5 ui-serif, Georgia, serif; color: var(--ink-soft);

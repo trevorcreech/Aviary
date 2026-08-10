@@ -1,4 +1,6 @@
-# AvianVisitors
+# Aviary
+
+Trevor Creech's maintained fork of [AvianVisitors](https://github.com/Twarner491/AvianVisitors), created by Teddy Warner.
 
 *A live bird collage from your window.*
 
@@ -34,7 +36,7 @@ Use [Raspberry Pi Imager](https://www.raspberrypi.com/software/). Pick Raspberry
 
 - Username
 - WiFi SSID + password
-- Hostname: `birdnet`
+- Hostname: `aviary`
 - Enable SSH with password auth
 
 Plug the USB mic into the Pi. Place the capsule in a window or mount it outside. Boot.
@@ -46,13 +48,13 @@ Plug the USB mic into the Pi. Place the capsule in a window or mount it outside.
 Installer assumes passwordless sudo (Raspberry Pi OS Lite default - if you've tightened it, run `sudo raspi-config` -> *System Options* -> restore the default first).
 
 ```bash
-ssh <your-username>@birdnet.local
-curl -s https://raw.githubusercontent.com/Twarner491/AvianVisitors/avian-visitors/newinstaller.sh | bash
+ssh <your-username>@aviary.local
+curl -s https://raw.githubusercontent.com/trevorcreech/Aviary/aviary/newinstaller.sh | bash
 ```
 
-Clones this fork, installs BirdNET-Pi, symlinks the AvianVisitors overlay into the Caddy web root. Takes 20-40 minutes. Reboots when done.
+Clones Aviary, installs BirdNET-Pi, and symlinks the Aviary overlay into the Caddy web root. Takes 20-40 minutes. Reboots when done.
 
-Collage: `http://birdnet.local/`. Stock BirdNET-Pi UI: `http://birdnet.local/index.php`. The menu button in the top right opens an admin overlay with settings, system, log, and tool panels.
+Collage: `http://aviary.local/`. Stock BirdNET-Pi UI: `http://aviary.local/index.php`. The menu button in the top right opens an admin overlay with settings, system, log, and tool panels.
 
 ---
 
@@ -114,6 +116,6 @@ CC-BY-NC-SA-4.0, inherited from [BirdNET-Pi](https://github.com/Nachtzuster/Bird
 
 ---
 
-- [Fork this repository](https://github.com/Twarner491/AvianVisitors/fork)
-- [Watch this repo](https://github.com/Twarner491/AvianVisitors/subscription)
-- [Create issue](https://github.com/Twarner491/AvianVisitors/issues/new)
+- [Fork this repository](https://github.com/trevorcreech/Aviary/fork)
+- [Watch this repo](https://github.com/trevorcreech/Aviary/subscription)
+- [Create issue](https://github.com/trevorcreech/Aviary/issues/new)

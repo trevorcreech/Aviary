@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Install the AvianVisitors e-ink frame (display side) on a Raspberry Pi.
+# Install the Aviary e-ink frame (display side) on a Raspberry Pi.
 # Enables SPI + I2C, installs deps, makes a venv, installs the systemd timer.
 #
 # Three ways to feed the frame, pick one:
 #   ./install.sh                            mirror the BirdNET-Pi on your network
-#                                           (birdnet.local), rendered on this Pi
+#                                           (aviary.local), rendered on this Pi
 #   ./install.sh --image-url <URL>          fetch a ready-made frame PNG instead
 #                                           (e.g. a public Cloudflare Worker)
 #   ./install.sh --bird-weather --zip <ZIP> standalone from BirdWeather, no mic
@@ -116,10 +116,10 @@ elif [ "$MODE" = local ]; then
   cat > "$CONFIG" <<'CFG'
 # birdframe-mode: local
 # AvianVisitors frame, local mode: mirrors the BirdNET-Pi on your network.
-# This Pi screenshots birdnet.local itself, so there is nothing else to set up.
-base_url = "http://birdnet.local"
+# This Pi screenshots aviary.local itself, so there is nothing else to set up.
+base_url = "http://aviary.local"
 shoot = true
-shoot_title = "Avian Visitors"
+shoot_title = "Aviary"
 shoot_subtitle = "Heard Today"
 rotate = 90          # flip to 270 if the frame hangs the other way up
 saturation = 0.6
@@ -151,7 +151,7 @@ else
     printf '%s\n' 'bw_days = 7          # BirdWeather lookback window, in days'
     printf '%s\n' 'bw_country = "us"    # geocoder country for the ZIP'
     printf '%s\n' 'shoot = true         # this Pi renders the collage'
-    printf '%s\n' 'shoot_title = "Avian Visitors"'
+    printf '%s\n' 'shoot_title = "Aviary"'
     printf '%s\n' 'shoot_subtitle = "Heard Today"'
     printf '%s\n' 'rotate = 90          # flip to 270 if the frame hangs the other way up'
     printf '%s\n' 'saturation = 0.6'
@@ -162,7 +162,7 @@ echo "5/5  Installing systemd service + timer..."
 # Every mode runs display.py against the config on the standard 15-minute timer;
 # only the config differs. display.py renders inline for local + birdweather and
 # pushes to the panel only when the birds change.
-sed "s|/home/monalisa/AvianVisitors/frame|$FRAME|g; s|/home/monalisa|$HOME|g; s|User=monalisa|User=$USER|" \
+sed "s|/home/monalisa/Aviary/frame|$FRAME|g; s|/home/monalisa|$HOME|g; s|User=monalisa|User=$USER|" \
   systemd/birdframe.service | sudo tee /etc/systemd/system/birdframe.service >/dev/null
 # BirdWeather's remote-ZIP eBird fallback reads its key from the unit environment.
 if [ "$MODE" = birdweather ] && [ -n "$EBIRD_KEY" ]; then
@@ -176,7 +176,7 @@ case "$MODE" in
   local)
     cat <<DONE
 
-Installed. The frame mirrors birdnet.local on your network and refreshes every
+Installed. The frame mirrors aviary.local on your network and refreshes every
 15 min, only when the birds change. Until the mic has heard its first bird it
 shows a plain title card. If the panel hangs upside down, set rotate = 270 in
 ~/.birdframe/config.toml.

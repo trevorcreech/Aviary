@@ -4,7 +4,7 @@
 
 # --- Where the collage comes from -------------------------------------------
 # Default: mirror the BirdNET-Pi on your network. This Pi screenshots it.
-base_url = "http://birdnet.local"
+base_url = "http://aviary.local"
 shoot = true
 
 # Or fetch a ready-made PNG instead of rendering here (lighter, but needs
@@ -25,7 +25,7 @@ shoot = true
 hours = 24             # window shown on the frame
 
 # --- Titles and look (used when this Pi renders, i.e. shoot = true) ----------
-shoot_title = "Avian Visitors"
+shoot_title = "Aviary"
 shoot_subtitle = "Heard Today"
 # shoot_headline_px = 42
 # shoot_eyebrow_px = 18

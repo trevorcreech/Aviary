@@ -3,14 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>your birds</title>
+<title>Aviary</title>
 <meta name="description" content="A live bird collage from your window.">
 <link rel="icon" type="image/png" href="./favicon.png">
 <link rel="apple-touch-icon" href="./favicon.png">
 <!-- Apply the saved theme before first paint so dark mode doesn't flash
      light on load. The full switcher lives in Settings (writes bird:theme). -->
 <script>try{if(localStorage.getItem('bird:theme')==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}</script>
-<link rel="stylesheet" href="./styles.css?v=r12">
+<link rel="stylesheet" href="./styles.css?v=r14">
 </head>
 <body class="av-local">
 <!-- Pill in the top-left slot, only visible on admin overlays
@@ -44,12 +44,12 @@
     <p class="lock-hint" id="lockHint">enter password to unlock tools.</p>
   </div>
   <nav class="menu-items" id="dd-items"></nav>
-  <p class="built-by">built by <a href="https://theodore.net" target="_blank" rel="noopener">teddy</a> · <a href="https://github.com/Twarner491/AvianVisitors" target="_blank" rel="noopener">github</a></p>
+  <p class="built-by">built by <a href="https://theodore.net" target="_blank" rel="noopener">teddy</a> · <a href="https://github.com/trevorcreech/Aviary" target="_blank" rel="noopener">github</a></p>
 </aside>
 
 <main class="stage">
   <header class="static-head">
-    <button type="button" class="pre" id="aboutLink">your birds</button>
+    <button type="button" class="pre" id="aboutLink">Aviary</button>
     <h1 id="staticTitle">Heard Recently</h1>
   </header>
   <div class="views" id="views">
@@ -187,7 +187,7 @@
   <div class="modal-backdrop" data-close="1"></div>
   <div class="about-card" role="document">
     <button type="button" class="modal-close" data-close="1" aria-label="close">×</button>
-    <p class="about-eyebrow">your birds</p>
+    <p class="about-eyebrow">Aviary</p>
     <h2 id="aboutTitle">The birds outside your window</h2>
     <p class="about-body">A tiny microphone identifies every passing bird with Cornell's <a href="https://birdnet.cornell.edu/" target="_blank" rel="noopener">BirdNET</a>. Each species shows up as an illustration in the collage, sized by how often it's been heard.</p>
     <button type="button" class="about-explore" data-close="1">explore the birds →</button>
@@ -213,6 +213,6 @@
   </div>
 </section>
 
-<script src="./apt.js?v=r12"></script>
+<script src="./apt.js?v=r14"></script>
 </body>
 </html>
