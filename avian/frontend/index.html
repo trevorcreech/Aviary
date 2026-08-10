@@ -10,7 +10,7 @@
 <!-- Apply the saved theme before first paint so dark mode doesn't flash
      light on load. The full switcher lives in Settings (writes bird:theme). -->
 <script>try{if(localStorage.getItem('bird:theme')==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}</script>
-<link rel="stylesheet" href="./styles.css?v=r14">
+<link rel="stylesheet" href="./styles.css?v=r15">
 </head>
 <body class="av-local">
 <!-- Pill in the top-left slot, only visible on admin overlays
@@ -151,6 +151,13 @@
             <span class="tip">in flight</span>
           </button>
         </div>
+        <div class="reference-audio" id="modalReferenceWrap" hidden>
+          <a id="modalReferenceCredit" class="reference-credit" target="_blank" rel="noopener" aria-label="Open reference recording in Macaulay Library">Macaulay Library ↗</a>
+          <button id="modalReferenceAudio" type="button" aria-label="Play reference bird sound" aria-pressed="false">
+            <svg class="ref-play" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true"><path d="M3 2 L10 6 L3 10 Z"/></svg>
+            <svg class="ref-pause" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true"><rect x="3" y="2" width="2.5" height="8"/><rect x="6.5" y="2" width="2.5" height="8"/></svg>
+          </button>
+        </div>
       </div>
       <div class="modal-info">
         <h2 id="modalCommon">-</h2>
@@ -213,6 +220,6 @@
   </div>
 </section>
 
-<script src="./apt.js?v=r14"></script>
+<script src="./apt.js?v=r15"></script>
 </body>
 </html>

@@ -56,6 +56,12 @@ Clones Aviary, installs BirdNET-Pi, and symlinks the Aviary overlay into the Cad
 
 Collage: `http://aviary.local/`. Stock BirdNET-Pi UI: `http://aviary.local/index.php`. The menu button in the top right opens an admin overlay with settings, system, log, and tool panels.
 
+Species detail cards include an attributed reference-sound control when
+Macaulay Library/eBird has public audio for the taxon. Aviary selects a
+high-rated field recording that is not tagged as playback, caches only its
+metadata on the Pi, and streams the MP3 from Cornell's media CDN. No eBird API
+key or local reference-audio library is required.
+
 ---
 
 ## 3. (Optional) Restyle the illustrations

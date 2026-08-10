@@ -1358,6 +1358,38 @@
   .pose-toggle button:hover .tip { opacity: 1; }
   .pose-toggle[data-unavailable="true"] { display: none; }
   .pose-toggle button[data-unavailable="true"] { display: none; }
+  /* Canonical field recording - bottom-right of the illustration tile,
+     opposite the pose switcher. Audio stays on Cornell's CDN; the compact
+     credit opens the exact Macaulay Library asset. */
+  .reference-audio {
+    position: absolute; right: 10px; bottom: 10px; z-index: 2;
+    display: flex; align-items: center; gap: 7px;
+  }
+  .reference-audio[hidden] { display: none; }
+  .reference-credit {
+    color: var(--ink-soft); background: color-mix(in srgb, var(--paper-2) 90%, transparent);
+    border-radius: 999px; padding: 5px 8px;
+    font: 8px/1 ui-monospace, Menlo, monospace;
+    letter-spacing: 0.06em; text-decoration: none;
+    box-shadow: var(--recess); backdrop-filter: blur(4px);
+  }
+  .reference-credit:hover { color: var(--ink); }
+  .reference-audio button {
+    width: 32px; height: 32px; padding: 0; border: 0; border-radius: 999px;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: var(--paper); color: var(--ink); box-shadow: var(--raised);
+    cursor: pointer; transition: color 160ms ease, background 160ms ease, transform 160ms ease;
+  }
+  .reference-audio button:hover { transform: translateY(-1px); }
+  .reference-audio button[data-state="loading"] { cursor: wait; opacity: 0.7; }
+  .reference-audio button[data-state="playing"] { background: var(--ink); color: var(--paper); }
+  .reference-audio button svg { width: 11px; height: 11px; }
+  .reference-audio button .ref-pause { display: none; }
+  .reference-audio button[data-state="playing"] .ref-play { display: none; }
+  .reference-audio button[data-state="playing"] .ref-pause { display: block; }
+  @media (max-width: 420px) {
+    .reference-credit { font-size: 7.5px; padding: 5px 7px; }
+  }
   .modal-info h2 {
     margin: 4px 36px 0 0;
     font: 700 26px/1.1 ui-serif, "Iowan Old Style", "Bookman Old Style", Georgia, serif;

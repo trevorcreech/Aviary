@@ -1922,8 +1922,69 @@
   // tunnel; one fetch per session is plenty.
   var SPECIES_CACHE = {};
   var WIKI_CACHE = {};
+  var REFERENCE_CACHE = {};
   var modalAudio = null;
   var modalRecBtn = null;
+  var referenceAudio = null;
+
+  function setReferenceState(state) {
+    var btn = document.getElementById('modalReferenceAudio');
+    if (!btn) return;
+    btn.dataset.state = state || 'idle';
+    var playing = state === 'playing';
+    btn.setAttribute('aria-pressed', playing ? 'true' : 'false');
+    btn.setAttribute('aria-label', playing ? 'Pause reference bird sound' : 'Play reference bird sound');
+  }
+
+  function stopReferenceAudio() {
+    audioRelease(stopReferenceAudio);
+    if (referenceAudio) {
+      try { referenceAudio.pause(); } catch (e) { }
+      referenceAudio = null;
+    }
+    setReferenceState('idle');
+  }
+
+  function renderReferenceRecording(sci, recording) {
+    if ((document.getElementById('modalSci').textContent || '').trim() !== sci) return;
+    var wrap = document.getElementById('modalReferenceWrap');
+    var btn = document.getElementById('modalReferenceAudio');
+    var credit = document.getElementById('modalReferenceCredit');
+    if (!recording || !recording.available || !recording.audio_url) {
+      wrap.hidden = true;
+      return;
+    }
+    var who = recording.contributor ? ' · ' + recording.contributor : '';
+    var kind = recording.sound_type && recording.sound_type !== 'reference'
+      ? recording.sound_type + ' · ' : '';
+    btn.dataset.audio = recording.audio_url;
+    btn.title = 'Play ' + kind + 'Macaulay Library ML' + recording.asset_id + who;
+    credit.href = recording.asset_url;
+    credit.textContent = 'ML' + recording.asset_id + ' ↗';
+    credit.title = 'Macaulay Library' + who;
+    wrap.hidden = false;
+    setReferenceState('idle');
+  }
+
+  function loadReferenceRecording(sci) {
+    var wrap = document.getElementById('modalReferenceWrap');
+    var btn = document.getElementById('modalReferenceAudio');
+    stopReferenceAudio();
+    wrap.hidden = true;
+    delete btn.dataset.audio;
+    if (REFERENCE_CACHE[sci]) {
+      renderReferenceRecording(sci, REFERENCE_CACHE[sci]);
+      return;
+    }
+    fetchJson('./avian/api/reference-recording.php?sci=' + encodeURIComponent(sci)).then(function (j) {
+      REFERENCE_CACHE[sci] = j;
+      renderReferenceRecording(sci, j);
+    }).catch(function () {
+      // Reference audio is an enhancement; the detail view remains complete
+      // when Cornell is offline or has no recording for this taxon.
+      renderReferenceRecording(sci, null);
+    });
+  }
 
   function renderModalSpecies(sci, j) {
     if ((document.getElementById('modalSci').textContent || '').trim() !== sci) return;
@@ -2186,6 +2247,7 @@
     document.getElementById('modalRecCount').textContent = '';
     document.getElementById('modalWiki').href = wikiUrl(sci);
     document.getElementById('modalEbird').href = ebirdUrl(sci);
+    loadReferenceRecording(sci);
     // FLIP-style morph: scale + translate the modal-card from the
     // clicked atlas card's position to its natural centered size, so
     // the card *expands* into the detail view instead of just fading
@@ -2232,6 +2294,7 @@
   function closeDetailModal() {
     var modal = document.getElementById('detail-modal');
     stopModalAudio();
+    stopReferenceAudio();
     // Reverse-morph back into the source atlas card so the modal
     // appears to *retract* to where it came from. Look the card up
     // fresh - the user may have switched the time window or sort
@@ -2369,6 +2432,36 @@
         img.removeEventListener('load', once);
       });
     }, 180);
+  });
+
+  document.getElementById('modalReferenceAudio').addEventListener('click', function () {
+    var btn = this;
+    if (!btn.dataset.audio) return;
+    if (referenceAudio && !referenceAudio.paused) {
+      referenceAudio.pause();
+      audioRelease(stopReferenceAudio);
+      setReferenceState('idle');
+      return;
+    }
+    if (!referenceAudio) {
+      referenceAudio = new Audio(btn.dataset.audio);
+      referenceAudio.preload = 'metadata';
+      referenceAudio.addEventListener('playing', function () { setReferenceState('playing'); });
+      referenceAudio.addEventListener('pause', function () {
+        if (referenceAudio && !referenceAudio.ended) setReferenceState('idle');
+      });
+      referenceAudio.addEventListener('ended', stopReferenceAudio);
+      referenceAudio.addEventListener('error', function () {
+        stopReferenceAudio();
+        btn.title = 'Reference recording unavailable';
+      });
+    }
+    setReferenceState('loading');
+    audioClaim(stopReferenceAudio);
+    referenceAudio.play().catch(function () {
+      stopReferenceAudio();
+      btn.title = 'Reference recording unavailable';
+    });
   });
 
   // Expose for debugging during dev - also lets the modal be opened
