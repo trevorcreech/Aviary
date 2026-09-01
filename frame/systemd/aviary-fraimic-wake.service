@@ -1,0 +1,17 @@
+[Unit]
+Description=Upload a prepared image when Fraimic wakes
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=avian
+WorkingDirectory=/home/avian/BirdNET-Pi/frame
+ExecStart=/home/avian/BirdNET-Pi/frame/.venv-fraimic/bin/python /home/avian/BirdNET-Pi/frame/fraimic_wake.py --config /home/avian/.birdframe/fraimic.toml
+Environment=PYTHONUNBUFFERED=1
+Restart=on-failure
+RestartSec=5
+Nice=10
+
+[Install]
+WantedBy=multi-user.target
