@@ -1,0 +1,4 @@
+# Aviary Pi: render the live collage and send it to Fraimic's local REST API.
+Pillow>=10,<12
+playwright>=1.40
+tomli; python_version < "3.11"

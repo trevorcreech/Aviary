@@ -1,0 +1,22 @@
+# Aviary -> Fraimic local API. The Fraimic stays paired to its cloud dashboard.
+base_url = "http://aviary.local"
+fraimic_url = "http://fraimic.local"
+
+# Physical mounting: "portrait" or "landscape". Landscape assumes a left turn,
+# with the frame's original bottom edge on the right.
+orientation = "portrait"
+
+# Show the rolling last 24 hours.
+hours = 24
+shoot_title = "Aviary"
+shoot_subtitle = "Heard Today"
+shoot_collage_vh = 52
+timeout = 180
+
+# Check every 15 minutes, but redraw only when the bird signature changes (or
+# for the daily healing refresh).
+quiet_start = 0
+quiet_end = 0
+heal_hours = 24
+state = "~/.birdframe/fraimic-state.json"
+cache = "~/.birdframe"

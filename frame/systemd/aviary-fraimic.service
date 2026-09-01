@@ -1,0 +1,13 @@
+[Unit]
+Description=Render Aviary collage and update Fraimic
+Wants=network-online.target
+After=network-online.target birdnet_analysis.service
+
+[Service]
+Type=oneshot
+User=avian
+WorkingDirectory=/home/avian/BirdNET-Pi/frame
+ExecStart=/home/avian/BirdNET-Pi/frame/.venv-fraimic/bin/python /home/avian/BirdNET-Pi/frame/fraimic.py --config /home/avian/.birdframe/fraimic.toml
+Environment=PYTHONUNBUFFERED=1
+Nice=10
+TimeoutStartSec=300
