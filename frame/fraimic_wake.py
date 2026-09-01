@@ -109,7 +109,9 @@ def watch(cfg, interval, probe_timeout, upload_timeout, refresh_seconds):
     prepared_at = datetime.now().astimezone()
     next_refresh = time.monotonic() + refresh_seconds
     awake = False
-    uploaded = False
+    upload_handled = False
+    upload_result = "none"
+    upload_not_before = 0.0
     last_counts = None
     wake_started = None
     upload_tries = 0
@@ -125,6 +127,7 @@ def watch(cfg, interval, probe_timeout, upload_timeout, refresh_seconds):
             if not awake:
                 wake_started = time.monotonic()
                 upload_tries = 0
+                upload_result = "none"
                 print(f"{now.isoformat()} WAKE_DETECTED "
                       f"probe_ms={probe_ms} "
                       f"payload_prepared={prepared_at.isoformat()} "
@@ -133,7 +136,14 @@ def watch(cfg, interval, probe_timeout, upload_timeout, refresh_seconds):
                       flush=True)
                 last_counts = None
             awake = True
-            if not uploaded:
+            if not upload_handled and time.monotonic() < upload_not_before:
+                remaining = upload_not_before - time.monotonic()
+                upload_handled = True
+                upload_result = "suppressed_after_timeout"
+                print(f"{datetime.now().astimezone().isoformat()} "
+                      f"UPLOAD_SUPPRESSED cooldown_remaining_s={remaining:.1f}",
+                      flush=True)
+            if not upload_handled:
                 upload_tries += 1
                 upload_started = time.monotonic()
                 print(f"{datetime.now().astimezone().isoformat()} "
@@ -151,13 +161,23 @@ def watch(cfg, interval, probe_timeout, upload_timeout, refresh_seconds):
                           f"elapsed_ms={round((time.monotonic() - upload_started) * 1000)} "
                           f"response={body!r}",
                           flush=True)
-                    uploaded = True
+                    upload_handled = True
+                    upload_result = "confirmed"
+                    upload_not_before = time.monotonic() + 120
+                except TimeoutError as exc:
+                    upload_handled = True
+                    upload_result = "timeout_assumed_accepted"
+                    upload_not_before = time.monotonic() + 120
+                    print(f"{datetime.now().astimezone().isoformat()} "
+                          f"UPLOAD_TIMEOUT_NO_RETRY try={upload_tries} "
+                          f"elapsed_ms={round((time.monotonic() - upload_started) * 1000)} "
+                          f"error={exc!r}", flush=True)
                 except OSError as exc:
                     print(f"{datetime.now().astimezone().isoformat()} "
                           f"UPLOAD_RETRY try={upload_tries} "
                           f"elapsed_ms={round((time.monotonic() - upload_started) * 1000)} "
                           f"error={exc!r}", flush=True)
-            if uploaded:
+            if upload_handled:
                 result, info_ms, info_error = render_counts(
                     cfg["fraimic_url"], probe_timeout)
                 if result is not None:
@@ -177,12 +197,13 @@ def watch(cfg, interval, probe_timeout, upload_timeout, refresh_seconds):
         else:
             if awake:
                 awake_s = time.monotonic() - wake_started
-                print(f"{now.isoformat()} SLEEP_DETECTED uploaded={uploaded} "
+                print(f"{now.isoformat()} SLEEP_DETECTED "
+                      f"upload_result={upload_result} "
                       f"upload_tries={upload_tries} awake_s={awake_s:.1f} "
                       f"last_counts={last_counts} probe_ms={probe_ms} "
                       f"probe_error={probe_error!r}", flush=True)
             awake = False
-            uploaded = False
+            upload_handled = False
             if time.monotonic() >= next_refresh:
                 payload = prepare_payload(cfg, now)
                 prepared_at = now
