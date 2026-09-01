@@ -59,16 +59,49 @@ def prepare_payload(cfg, now=None):
     return pack(quantize(raw))
 
 
-def reachable(base_url, timeout):
+def api_json(base_url, endpoint, timeout):
     request = urllib.request.Request(
-        base_url.rstrip("/") + "/api/battery",
+        base_url.rstrip("/") + "/api/" + endpoint,
         headers={"User-Agent": "Aviary-Fraimic-Wake/1.0"})
+    started = time.monotonic()
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
-            response.read(10_000)
-            return 200 <= response.status < 300
-    except OSError:
-        return False
+            body = response.read(100_000).decode("utf-8", "replace")
+            if response.status < 200 or response.status >= 300:
+                return None, round((time.monotonic() - started) * 1000), \
+                    f"HTTP {response.status}"
+            return json.loads(body), \
+                round((time.monotonic() - started) * 1000), None
+    except (OSError, ValueError) as exc:
+        return None, round((time.monotonic() - started) * 1000), str(exc)
+
+
+def _find_int(value, key):
+    if isinstance(value, dict):
+        if key in value:
+            try:
+                return int(value[key])
+            except (TypeError, ValueError):
+                pass
+        for child in value.values():
+            found = _find_int(child, key)
+            if found is not None:
+                return found
+    elif isinstance(value, list):
+        for child in value:
+            found = _find_int(child, key)
+            if found is not None:
+                return found
+    return None
+
+
+def render_counts(base_url, timeout):
+    info, elapsed_ms, error = api_json(base_url, "info", timeout)
+    if info is None:
+        return None, elapsed_ms, error
+    attempts = _find_int(info, "render_attempts")
+    failures = _find_int(info, "render_failures")
+    return (attempts, failures, info), elapsed_ms, None
 
 
 def watch(cfg, interval, probe_timeout, upload_timeout, refresh_seconds):
@@ -77,18 +110,35 @@ def watch(cfg, interval, probe_timeout, upload_timeout, refresh_seconds):
     next_refresh = time.monotonic() + refresh_seconds
     awake = False
     uploaded = False
+    last_counts = None
+    wake_started = None
+    upload_tries = 0
     print(f"{prepared_at.isoformat()} ARMED interval={interval}s "
           f"payload_bytes={len(payload)}", flush=True)
 
     while True:
-        is_reachable = reachable(cfg["fraimic_url"], probe_timeout)
+        battery, probe_ms, probe_error = api_json(
+            cfg["fraimic_url"], "battery", probe_timeout)
+        is_reachable = battery is not None
         now = datetime.now().astimezone()
         if is_reachable:
             if not awake:
+                wake_started = time.monotonic()
+                upload_tries = 0
                 print(f"{now.isoformat()} WAKE_DETECTED "
-                      f"payload_prepared={prepared_at.isoformat()}", flush=True)
+                      f"probe_ms={probe_ms} "
+                      f"payload_prepared={prepared_at.isoformat()} "
+                      f"payload_age_s={(now - prepared_at).total_seconds():.1f} "
+                      f"battery={json.dumps(battery, separators=(',', ':'))}",
+                      flush=True)
+                last_counts = None
             awake = True
             if not uploaded:
+                upload_tries += 1
+                upload_started = time.monotonic()
+                print(f"{datetime.now().astimezone().isoformat()} "
+                      f"UPLOAD_START try={upload_tries} bytes={len(payload)}",
+                      flush=True)
                 try:
                     body = send(payload, cfg["fraimic_url"], upload_timeout)
                     try:
@@ -96,16 +146,41 @@ def watch(cfg, interval, probe_timeout, upload_timeout, refresh_seconds):
                     except json.JSONDecodeError:
                         status = "accepted"
                     print(f"{datetime.now().astimezone().isoformat()} "
-                          f"UPLOAD_OK status={status} bytes={len(payload)}",
+                          f"UPLOAD_OK try={upload_tries} status={status} "
+                          f"bytes={len(payload)} "
+                          f"elapsed_ms={round((time.monotonic() - upload_started) * 1000)} "
+                          f"response={body!r}",
                           flush=True)
                     uploaded = True
                 except OSError as exc:
                     print(f"{datetime.now().astimezone().isoformat()} "
-                          f"UPLOAD_RETRY error={exc}", flush=True)
+                          f"UPLOAD_RETRY try={upload_tries} "
+                          f"elapsed_ms={round((time.monotonic() - upload_started) * 1000)} "
+                          f"error={exc!r}", flush=True)
+            if uploaded:
+                result, info_ms, info_error = render_counts(
+                    cfg["fraimic_url"], probe_timeout)
+                if result is not None:
+                    attempts, failures, info = result
+                    counts = attempts, failures
+                    print(f"{datetime.now().astimezone().isoformat()} "
+                          f"INFO_SNAPSHOT query_ms={info_ms} "
+                          f"attempts={attempts} failures={failures} "
+                          f"changed={counts != last_counts} "
+                          f"info={json.dumps(info, separators=(',', ':'))}",
+                          flush=True)
+                    last_counts = counts
+                else:
+                    print(f"{datetime.now().astimezone().isoformat()} "
+                          f"INFO_UNAVAILABLE query_ms={info_ms} "
+                          f"error={info_error!r}", flush=True)
         else:
             if awake:
-                print(f"{now.isoformat()} SLEEP_DETECTED uploaded={uploaded}",
-                      flush=True)
+                awake_s = time.monotonic() - wake_started
+                print(f"{now.isoformat()} SLEEP_DETECTED uploaded={uploaded} "
+                      f"upload_tries={upload_tries} awake_s={awake_s:.1f} "
+                      f"last_counts={last_counts} probe_ms={probe_ms} "
+                      f"probe_error={probe_error!r}", flush=True)
             awake = False
             uploaded = False
             if time.monotonic() >= next_refresh:
