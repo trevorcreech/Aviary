@@ -5,6 +5,7 @@ The main repo ships a Western-US set reviewed by hand. Other people have generat
 ## North America
 
 - **Western US**: ships in the main repo
+- **Florida, US (US-FL)**: [SupraBitKid's fork](https://github.com/SupraBitKid/AvianVisitors), 574 added species
 
 ## Europe
 
@@ -21,3 +22,4 @@ The main repo ships a Western-US set reviewed by hand. Other people have generat
 ## Oceania
 
 - **Victoria, Australia (AU-VIC)**: [TheWillni's repo](https://github.com/TheWillni/AusVicVisitors), not a full fork but just the illustrations, `dims.json` and `masks.json` for 398 species from Victoria, Australia (AU-VIC).
+- **Canberra / ACT, Australia (AU-ACT)**: [opurtell's repo](https://github.com/opurtell/AvianVisitorsACT), the `avian/` overlay only, for 403 species. The AU-VIC bundle above plus the 5 species it was missing (Australasian Pipit, Cattle Egret, Variegated Fairywren, Intermediate Egret, Barn Owl). Covers everything BirdNET attempts at Canberra with `DATA_MODEL_VERSION=2`. Also ships the species derivation and a ready-made `include_species_list.txt` for the region.

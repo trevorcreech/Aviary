@@ -52,6 +52,7 @@ DEFAULTS = {
     "orientation": "portrait",
     "species_source": "",
     "zip": "",
+    "bw_station_id": "",
     "bw_days": 7,
     "bw_country": "us",
     "hours": 24,
@@ -64,6 +65,7 @@ DEFAULTS = {
     "shoot_small_floor": 0.04,
     "shoot_count_exp": 0.65,
     "shoot_collage_vh": 52,
+    "bird_names": False,
     "quiet_start": 0,
     "quiet_end": 0,
     "heal_hours": 24,
@@ -108,6 +110,7 @@ def render(cfg, species=None):
         "small_floor": cfg["shoot_small_floor"],
         "count_exp": cfg["shoot_count_exp"],
         "window_hours": cfg["hours"],
+        "bird_names": cfg["bird_names"],
         "timeout_ms": cfg["timeout"] * 1000,
     }
     if cfg.get("species_source") == "birdweather":

@@ -3,8 +3,8 @@
 //
 // POST JSON: {"file":"<BirdNET recording basename>.mp3"}
 //
-// This endpoint always validates Aviary's password against a server-side hash,
-// even on the otherwise-unrestricted LAN site. A narrowly scoped root helper moves
+// This endpoint always requires an authenticated admin session, even when LAN
+// admin protection is otherwise disabled. A narrowly scoped root helper moves
 // the audio/spectrogram into a private quarantine, takes a SQLite backup, and
 // removes exactly one matching database row.
 
@@ -12,36 +12,16 @@ declare(strict_types=1);
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
 
+require_once __DIR__ . '/admin-auth.php';
+
 function respond(int $status, array $body): never {
     http_response_code($status);
     echo json_encode($body);
     exit;
 }
 
-function supplied_password(): string {
-    $custom = $_SERVER['HTTP_X_AVIARY_PASSWORD'] ?? null;
-    if (is_string($custom)) return $custom;
-
-    $pass = $_SERVER['PHP_AUTH_PW'] ?? null;
-    if (is_string($pass)) return $pass;
-
-    $header = (string)($_SERVER['HTTP_AUTHORIZATION'] ?? '');
-    if (stripos($header, 'Basic ') !== 0) return '';
-    $decoded = base64_decode(substr($header, 6), true);
-    if (!is_string($decoded) || strpos($decoded, ':') === false) return '';
-    return explode(':', $decoded, 2)[1];
-}
-
-if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
-    respond(405, ['ok' => false, 'error' => 'method not allowed']);
-}
-
-$hashPath = '/etc/aviary/delete-password.hash';
-$expectedHash = is_readable($hashPath) ? trim((string)file_get_contents($hashPath)) : '';
-$pass = supplied_password();
-if ($expectedHash === '' || $pass === '' || !password_verify($pass, $expectedHash)) {
-    respond(401, ['ok' => false, 'error' => 'admin password required']);
-}
+avian_require_json_action();
+avian_require_admin_proof();
 
 $raw = file_get_contents('php://input');
 if (!is_string($raw) || strlen($raw) > 4096) {
