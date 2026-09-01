@@ -49,7 +49,7 @@ vm.runInContext([
 
 const preferenceMarkupContext = {
   themePreference() { return 'auto'; },
-  readLS() { return 'on'; },
+  readLS(key, fallback) { return fallback; },
 };
 vm.createContext(preferenceMarkupContext);
 vm.runInContext([
@@ -74,13 +74,13 @@ assert.match(themeMarkup, /aria-label="Use dark theme"[\s\S]*role="tooltip">dark
   'the dark icon has matching accessible and visible tooltip copy');
 assert.doesNotMatch(themeMarkup, />\s*(auto|light|dark)\s*<\/button>/i,
   'Theme option names are not rendered as button text');
-assert.match(labelsMarkup, /class="switch" role="switch" aria-label="Show bird names"[\s\S]*aria-checked="true"[\s\S]*data-labels-switch/,
-  'Bird names uses the standard Settings switch and keeps its on-by-default state');
+assert.match(labelsMarkup, /class="switch" role="switch" aria-label="Show bird names"[\s\S]*aria-checked="false"[\s\S]*data-labels-switch/,
+  'Bird names uses the standard Settings switch and stays off by default');
 assert.doesNotMatch(labelsMarkup, /data-labels-seg|>off<|>on</,
   'Bird names no longer renders a bespoke off-on segmented picker');
 
 function labelsSwitchHarness() {
-  const attrs = { 'aria-checked': 'true' };
+  const attrs = { 'aria-checked': 'false' };
   let listener = null;
   const writes = [];
   let renders = 0;
@@ -99,11 +99,11 @@ function labelsSwitchHarness() {
   vm.runInContext(functionSource('wireLabelsPreference'), context);
   context.wireLabelsPreference({ querySelector() { return button; } });
   listener();
-  assert.equal(attrs['aria-checked'], 'false', 'Bird names switches off on the first press');
-  assert.deepEqual(writes[0], ['bird:labels', 'off'], 'the off state persists locally');
+  assert.equal(attrs['aria-checked'], 'true', 'Bird names switches on when requested');
+  assert.deepEqual(writes[0], ['bird:labels', 'on'], 'the on state persists locally');
   listener();
-  assert.equal(attrs['aria-checked'], 'true', 'Bird names switches back on');
-  assert.deepEqual(writes[1], ['bird:labels', 'on'], 'the on state persists locally');
+  assert.equal(attrs['aria-checked'], 'false', 'Bird names switches back off');
+  assert.deepEqual(writes[1], ['bird:labels', 'off'], 'the off state persists locally');
   assert.equal(renders, 2, 'each state change redraws the collage once');
 }
 labelsSwitchHarness();
@@ -1009,6 +1009,6 @@ gateSelectors.forEach(function (selector) {
 });
 
 assert.match(html, /styles\.css\?v=r189/, 'the polished styles have a fresh cache key');
-assert.match(html, /apt\.js\?v=r215/, 'the polished behavior has a fresh cache key');
+assert.match(html, /apt\.js\?v=r216/, 'the polished behavior has a fresh cache key');
 
 console.log('admin UI polish smoke: ok');

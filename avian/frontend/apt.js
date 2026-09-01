@@ -663,7 +663,7 @@
   // leaves inside itself: that clearing is where the packer wants to nest
   // the next bird. The whole em band of the lettering is proved clear of the
   // silhouette before it is accepted, so no name ends up threaded through a
-  // bird's own feet. The lettering's box is what the packer reserves. On by
+  // bird's own feet. The lettering's box is what the packer reserves. Off by
   // default; saved on this device like the theme. ?labels=1|0 overrides both
   // (that is how the frame's shoot can force them without localStorage).
   // Two quantities that used to be one number. LABEL_NEAR is the paper the
@@ -825,7 +825,7 @@
   var labelParam = /[?&]labels=(1|0)\b/.exec(location.search);
   function labelsOn() {
     if (labelParam) return labelParam[1] === '1';
-    return readLS('bird:labels', 'on') === 'on';
+    return readLS('bird:labels', 'off') === 'on';
   }
   var labelCtx = document.createElement('canvas').getContext('2d');
   var edgeFitCache = {};
@@ -6278,7 +6278,7 @@
   function labelsRow() {
     // Same default as labelsOn(), or the switch reads off on a fresh device
     // while the collage is drawing names.
-    var cur = readLS('bird:labels', 'on');
+    var cur = readLS('bird:labels', 'off');
     return ''
       + '<div class="menu-row">'
       + '  <div><span class="label">Bird names</span><span class="hint">show names alongside birds in the collage</span></div>'
