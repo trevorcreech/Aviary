@@ -13,7 +13,7 @@ shoot_subtitle = "Heard Today"
 shoot_collage_vh = 52
 timeout = 180
 
-# Check every 15 minutes, but redraw only when the bird signature changes (or
+# Check on the hour, but redraw only when the bird signature changes (or
 # for the daily healing refresh).
 quiet_start = 0
 quiet_end = 0

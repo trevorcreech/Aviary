@@ -1,9 +1,10 @@
 [Unit]
-Description=Check Aviary for Fraimic updates every 15 minutes
+Description=Check Aviary for Fraimic updates hourly
 
 [Timer]
-OnBootSec=2min
-OnUnitActiveSec=15min
+OnCalendar=hourly
+AccuracySec=1s
+RandomizedDelaySec=0
 Persistent=true
 
 [Install]
