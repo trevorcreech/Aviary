@@ -10,6 +10,7 @@ export LC_ALL
 
 conf=/etc/birdnet/birdnet.conf
 site_overlay=/etc/caddy/avian-site-overlay.caddy
+extra_sites=/etc/caddy/avian-extra-sites.caddy
 auth_dir=/var/lib/avian-visitors
 auth_lock=$auth_dir/admin-auth.lock
 auth_state=$auth_dir/admin-auth.state
@@ -599,6 +600,20 @@ if [ -e "$site_overlay" ] || [ -L "$site_overlay" ]; then
   site_overlay_import="  import $site_overlay"$'\n'
 fi
 
+extra_sites_import=''
+if [ -e "$extra_sites" ] || [ -L "$extra_sites" ]; then
+  if [ -L "$extra_sites" ] || [ ! -f "$extra_sites" ]; then
+    echo "Refusing unsafe Caddy extra sites file: expected a regular file" >&2
+    exit 1
+  fi
+
+  extra_sites_stat=$(stat -c '%u:%g:%a:%h' -- "$extra_sites")
+  [ "$extra_sites_stat" = "0:$caddy_gid:640:1" ] \
+    || { echo "Refusing unsafe Caddy extra sites file: expected root:caddy 0640 with one link" >&2; exit 1; }
+
+  extra_sites_import=$'\n'"import $extra_sites"$'\n'
+fi
+
 stream_guard=''
 if [ "$AVIAN_REQUIRE_LAN_AUTH" = 1 ]; then
   stream_guard='      respond 404'
@@ -813,6 +828,7 @@ $stream_guard
     file_server
   }
 }
+${extra_sites_import}
 EOF
 
 caddy fmt --overwrite "$temp"

@@ -14,6 +14,7 @@ fail() { echo "FAIL: $*" >&2; exit 1; }
 [ "$(id -u)" -eq 0 ] || fail "test must run as root"
 test_root=/tmp/avian-caddy-overlay-smoke
 overlay=/etc/caddy/avian-site-overlay.caddy
+extra_sites=/etc/caddy/avian-extra-sites.caddy
 generator=/source/scripts/update_caddyfile.sh
 auth_dir=/var/lib/avian-visitors
 mkdir -p "$test_root" /etc/birdnet /etc/caddy /srv/avian \
@@ -119,6 +120,14 @@ remove_overlay() {
   fi
 }
 
+remove_extra_sites() {
+  if [ -d "$extra_sites" ] && [ ! -L "$extra_sites" ]; then
+    rmdir "$extra_sites"
+  elif [ -e "$extra_sites" ] || [ -L "$extra_sites" ]; then
+    rm -f "$extra_sites"
+  fi
+}
+
 expect_overlay_refusal() {
   local label=$1
   reset_logs
@@ -136,6 +145,7 @@ expect_overlay_refusal() {
 
 # Trusted mode uses no Basic gate and leaves direct live audio available.
 remove_overlay
+remove_extra_sites
 write_state 0 0 -
 reset_logs
 write_original
@@ -277,6 +287,43 @@ bash "$generator"
 ! grep -Fq '@localOverlay' /etc/caddy/Caddyfile \
   || fail "overlay contents were copied into the managed Caddyfile"
 remove_overlay
+
+# A separate, safely owned file can add whole Caddy sites without placing
+# private deployment details in the repository or managed configuration.
+cat >"$extra_sites" <<'EOF'
+:8091 {
+  bind 127.0.0.1
+  respond 200
+}
+EOF
+chown root:caddy "$extra_sites"
+chmod 0640 "$extra_sites"
+reset_logs
+bash "$generator"
+grep -Fxq "import $extra_sites" /etc/caddy/Caddyfile \
+  || fail "valid extra sites file was not imported"
+! grep -Fq 'bind 127.0.0.1' /etc/caddy/Caddyfile \
+  || fail "extra site contents were copied into the managed Caddyfile"
+remove_extra_sites
+
+printf ':8091 { respond 200 }\n' >"$test_root/extra-sites-target"
+chown root:caddy "$test_root/extra-sites-target"
+chmod 0640 "$test_root/extra-sites-target"
+ln -s "$test_root/extra-sites-target" "$extra_sites"
+reset_logs
+write_original
+if bash "$generator" >"$test_root/extra-sites-symlink.log" 2>&1; then
+  fail "symlink extra sites file was accepted"
+fi
+[ "$(cat /etc/caddy/Caddyfile)" = 'original caddy config' ] \
+  || fail "unsafe extra sites file replaced the active Caddyfile"
+[ ! -s "$test_root/order.log" ] \
+  || fail "unsafe extra sites file reached Caddy validation"
+grep -Fq 'Refusing unsafe Caddy extra sites file' \
+  "$test_root/extra-sites-symlink.log" \
+  || fail "unsafe extra sites file did not report an explicit refusal"
+remove_extra_sites
+rm -f "$test_root/extra-sites-target"
 
 printf 'respond /redirected 200\n' >"$test_root/target"
 chown root:caddy "$test_root/target"
