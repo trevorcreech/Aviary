@@ -17,7 +17,7 @@ import time
 import urllib.request
 from datetime import datetime
 
-from PIL import Image
+from PIL import Image, ImageChops
 
 from display import (_auth, fetch_species, in_quiet_hours, load_state,
                      save_state, signature)
@@ -140,11 +140,29 @@ def orient_for_api(img, orientation):
     return raw
 
 
+def clean_palette_extremes(img):
+    """Make nearly white backgrounds and very dark ink solid before dithering."""
+    rgb = img.convert("RGB")
+    red, green, blue = rgb.split()
+    white_lut = [0] * 245 + [255] * 11
+    black_lut = [255] * 81 + [0] * 175
+    near_white = ImageChops.darker(
+        ImageChops.darker(red.point(white_lut), green.point(white_lut)),
+        blue.point(white_lut))
+    near_black = ImageChops.darker(
+        ImageChops.darker(red.point(black_lut), green.point(black_lut)),
+        blue.point(black_lut))
+    cleaned = rgb.copy()
+    cleaned.paste((255, 255, 255), mask=near_white)
+    cleaned.paste((0, 0, 0), mask=near_black)
+    return cleaned
+
+
 def quantize(img):
     palette_image = Image.new("P", (1, 1))
     flat = [channel for color in PALETTE for channel in color]
     palette_image.putpalette(flat + [0, 0, 0] * (256 - len(PALETTE)))
-    return img.convert("RGB").quantize(
+    return clean_palette_extremes(img).quantize(
         palette=palette_image, dither=Image.Dither.FLOYDSTEINBERG)
 
 
