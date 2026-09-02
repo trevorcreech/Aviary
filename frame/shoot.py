@@ -49,15 +49,19 @@ HIDE_CSS = """
 """
 
 
-def _frame_css(headline_px, eyebrow_px, lowercase, pad_top, pad_side, pad_bottom, collage_vh):
+def _frame_css(headline_px, eyebrow_px, lowercase, pad_top, pad_side, pad_bottom,
+               collage_vh, collage_scale):
     css = (
         f".stage {{ padding: {pad_top}px {pad_side}px {pad_bottom}px !important;"
         f" box-sizing: border-box !important; justify-content: center !important; }}"
         f".views {{ flex: 0 0 auto !important; height: {collage_vh}vh !important; }}"
         f".view#v0 {{ height: 100% !important; flex: 1 1 100% !important; padding: 6px 0 !important; }}"
-        f".gcollage {{ max-width: none !important; }}"
+        f".gcollage {{ max-width: none !important;"
+        f" transform: scale({collage_scale}) !important; }}"
         f".static-head {{ padding: 0 8px 14px !important; }}"
-        f".static-head .pre {{ font-size: {eyebrow_px}px !important; }}"
+        f".static-head .pre {{ font-size: {eyebrow_px}px !important;"
+        f" height: auto !important; max-height: none !important;"
+        f" line-height: 1.22 !important; overflow: visible !important; }}"
         f".static-head h1 {{ font-size: {headline_px}px !important; }}"
         ".gtile-label text { fill: #000 !important; filter: none !important;"
         " font-weight: 400 !important; }"
@@ -178,7 +182,8 @@ def _make_js_handler(xbias, ybias, count_exp, pad, label_min_px, auth, misses):
 
 def shoot(url, out, *, title=None, subtitle=None, vw=600, vh=800, dsf=2,
           headline_px=42, eyebrow_px=18, lowercase=False,
-          mat=0.04, collage_vh=52, cluster_xbias=1.0, cluster_ybias=1.2,
+          mat=0.04, collage_vh=52, collage_scale=1.0,
+          cluster_xbias=1.0, cluster_ybias=1.2,
           count_exp=0.4, cluster_pad=1, label_min_px=11, small_floor=0.04, window_hours=None,
           timeout_ms=45000, user=None, password=None, species=None, cutout_base=None,
           cutout_local=None, empty_text="listening for birds…", bird_names=False):
@@ -211,7 +216,9 @@ def shoot(url, out, *, title=None, subtitle=None, vw=600, vh=800, dsf=2,
             if cutout_base:
                 page.route("**/cutout.php*", _make_cutout_handler(cutout_base, cutout_local))
 
-            css = HIDE_CSS + _frame_css(headline_px, eyebrow_px, lowercase, pad_top, pad_side, pad_bottom, collage_vh)
+            css = HIDE_CSS + _frame_css(
+                headline_px, eyebrow_px, lowercase, pad_top, pad_side,
+                pad_bottom, collage_vh, collage_scale)
             page.add_init_script(
                 "document.addEventListener('DOMContentLoaded',function(){"
                 "var s=document.createElement('style');s.textContent=" + json.dumps(css) +
@@ -265,6 +272,9 @@ def shoot(url, out, *, title=None, subtitle=None, vw=600, vh=800, dsf=2,
                 page.evaluate("t=>{const e=document.querySelector('.static-head .pre'); if(e)e.textContent=t;}", title)
             if subtitle is not None:
                 page.evaluate("s=>{const e=document.querySelector('.static-head h1'); if(e)e.textContent=s;}", subtitle)
+            if title == "" and subtitle == "":
+                page.evaluate("() => { const e = document.querySelector('.static-head');"
+                              " if (e) e.style.display = 'none'; }")
             # Set the empty-state line for a birdless frame (the mic hasn't heard
             # anything yet, or BirdWeather has no recent detections) and
             # darken it so it survives the e-ink dither and the matting step's ink

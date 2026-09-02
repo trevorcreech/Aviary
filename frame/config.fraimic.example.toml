@@ -10,7 +10,10 @@ orientation = "portrait"
 hours = 24
 shoot_title = "Aviary"
 shoot_subtitle = "Heard Today"
+# Set both titles to "" for a full-panel, birds-only composition.
 shoot_collage_vh = 52
+# Visually enlarge the bird cluster without changing the title layout.
+shoot_collage_scale = 1.0
 timeout = 180
 
 # Check on the hour, but redraw only when the bird signature changes (or
