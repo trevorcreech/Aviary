@@ -1,0 +1,13 @@
+# Port 80 on the AP is redirected here regardless of Host header.
+# Recovery clients never reach normal Aviary web routes.
+http://:8088 {
+    @recovery_clients remote_ip 192.168.4.0/24
+    handle @recovery_clients {
+        reverse_proxy unix//run/aviary-wifi-recovery/portal.sock {
+            header_up X-Aviary-Client-IP {http.request.remote.host}
+        }
+    }
+    handle {
+        respond "Not found" 404
+    }
+}

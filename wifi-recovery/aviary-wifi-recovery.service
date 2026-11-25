@@ -1,0 +1,31 @@
+[Unit]
+Description=Aviary recovery Wi-Fi and setup portal
+After=NetworkManager.service caddy.service aviary-wifi-guard.service
+Wants=NetworkManager.service caddy.service
+Requires=aviary-wifi-guard.service
+StartLimitIntervalSec=120
+StartLimitBurst=10
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /usr/local/lib/aviary-wifi-recovery/recovery.py
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=65
+UMask=0077
+StateDirectory=aviary-wifi-recovery
+StateDirectoryMode=0700
+RuntimeDirectory=aviary-wifi-recovery
+RuntimeDirectoryMode=0755
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/etc/NetworkManager/system-connections
+PrivateTmp=yes
+NoNewPrivileges=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK AF_PACKET
+
+[Install]
+WantedBy=multi-user.target
