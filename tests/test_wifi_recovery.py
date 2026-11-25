@@ -314,6 +314,18 @@ class HTTPTests(unittest.TestCase):
         self.assertIn("&lt;script&gt;&quot;&amp;", body)
         self.assertEqual(headers["Cache-Control"], "no-store")
 
+    def test_phone_connectivity_checks_redirect_to_setup(self):
+        for host, path in [("captive.apple.com", "/hotspot-detect.html"),
+                           ("connectivitycheck.gstatic.com", "/generate_204"),
+                           ("www.msftconnecttest.com", "/connecttest.txt")]:
+            with self.subTest(host=host):
+                status, _, headers = self.request(path=path, headers={"Host": host})
+                self.assertEqual(status, 302)
+                self.assertEqual(headers["Location"], "http://192.168.4.1/")
+                status, body, _ = self.request()
+                self.assertEqual(status, 200)
+                self.assertIn("Connect and save", body)
+
     def test_lan_public_and_unexpected_host_cannot_access_setup(self):
         for headers in ({"X-Aviary-Client-IP": "192.168.1.83"}, {"X-Aviary-Client-IP": "8.8.8.8"},
                         {"X-Aviary-Client-IP": ""}, {"Host": "aviary.cree.ch"}, {"Host": "192.168.4.1/path"}):

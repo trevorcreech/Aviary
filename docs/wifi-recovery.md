@@ -12,6 +12,12 @@ and hidden networks are supported. WPA enterprise and WPA3-only networks are
 not supported by this setup form. If the phone says the hotspot has no Internet,
 stay connected while entering the settings.
 
+Known phone/computer connectivity checks receive an HTTP redirect to the local
+setup page, supporting the native captive portal window. This behavior works
+independently of whether the hotspot requires a Wi-Fi password. The popup still
+depends on the phone's captive-network detection and saved network preferences;
+the manual address remains available if it does not open.
+
 The hotspot disappears while Aviary tries the new network. A successful
 connection is saved with autoconnect enabled and priority 50. On failure, only
 the new candidate profile is removed and the same setup hotspot returns.

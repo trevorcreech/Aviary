@@ -470,12 +470,14 @@ class Portal(http.server.BaseHTTPRequestHandler):
     def log_message(self, *_args):
         pass  # Never log submitted credentials, client headers, or paths.
 
-    def respond(self, status, content, content_type="text/html; charset=utf-8"):
+    def respond(self, status, content, content_type="text/html; charset=utf-8", location=None):
         content = content.encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(content)))
         self.send_header("Cache-Control", "no-store")
+        if location is not None:
+            self.send_header("Location", location)
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Referrer-Policy", "no-referrer")
         self.send_header("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'")
@@ -493,6 +495,12 @@ class Portal(http.server.BaseHTTPRequestHandler):
 
     def do_GET(self):
         if not self.available():
+            return
+        host = urlsplit("http://" + self.headers["Host"]).hostname
+        if host not in {GATEWAY, "aviary.setup"}:
+            # A redirect from the phone's connectivity probe opens its captive
+            # portal. Use a canonical local origin for the actual setup form.
+            self.respond(302, "Open the Aviary Wi-Fi setup page.", location=f"http://{GATEWAY}/")
             return
         if self.path == "/status":
             self.respond(200, json.dumps(self.server.controller.snapshot()), "application/json")
