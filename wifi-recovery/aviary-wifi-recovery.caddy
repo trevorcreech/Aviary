@@ -5,6 +5,7 @@ http://:8088 {
     handle @recovery_clients {
         reverse_proxy unix//run/aviary-wifi-recovery/portal.sock {
             header_up X-Aviary-Client-IP {http.request.remote.host}
+            header_up X-Aviary-Setup-Scheme http
         }
     }
     handle {

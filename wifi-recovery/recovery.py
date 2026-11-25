@@ -15,7 +15,9 @@ import queue
 import re
 import secrets
 import signal
+import socket
 import socketserver
+import ssl
 import subprocess
 import threading
 import time
@@ -31,6 +33,26 @@ HOSTS = {GATEWAY, "aviary.setup", "captive.apple.com",
 STATE_DIR = Path("/var/lib/aviary-wifi-recovery")
 PROFILE_DIR = Path("/etc/NetworkManager/system-connections")
 RUNTIME_DIR = Path("/run/aviary-wifi-recovery")
+
+
+def https_hostname(value):
+    value = value.lower()
+    if (len(value) > 253 or not re.fullmatch(r"(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}", value)
+            or value.endswith((".local", ".localhost", ".invalid", ".test"))):
+        raise ValueError("Use a public DNS hostname for trusted setup HTTPS.")
+    return value
+
+
+def trusted_https_ready(hostname):
+    """Check the cached local certificate, including public trust and expiry."""
+    try:
+        context = ssl.create_default_context()
+        with socket.create_connection(("127.0.0.1", 443), timeout=2) as raw:
+            with context.wrap_socket(raw, server_hostname=https_hostname(hostname)) as connection:
+                expiry = ssl.cert_time_to_seconds(connection.getpeercert()["notAfter"])
+                return expiry > time.time() + 600
+    except (OSError, ValueError, KeyError):
+        return False
 
 
 def private_write(path, text):
@@ -103,7 +125,7 @@ class Firewall:
         if mode == "hotspot":
             incoming = [f'iifname "{interface}" meta nfproto ipv4 udp dport 67 accept',
                         f'iifname "{interface}" ip saddr {NETWORK} ip daddr {GATEWAY} udp dport 53 accept',
-                        f'iifname "{interface}" ip saddr {NETWORK} ip daddr {GATEWAY} tcp dport {{ 53, 8088 }} accept',
+                        f'iifname "{interface}" ip saddr {NETWORK} ip daddr {GATEWAY} tcp dport {{ 53, 443, 8088 }} accept',
                         f'iifname "{interface}" counter drop']
             redirect = [f'iifname "{interface}" ip saddr {NETWORK} tcp dport 80 redirect to :8088']
         elif mode == "untrusted":
@@ -180,6 +202,15 @@ class NetworkManager:
                 self.command("--wait", "10", "connection", "down", "uuid", self.config["ap_uuid"])
             except RuntimeError:
                 pass
+
+    def prepare_ap(self, open_setup):
+        path = self.profile_dir / "aviary-recovery.nmconnection"
+        content = ap_profile({**self.config, "open_setup": open_setup})
+        if path.exists() and path.read_text() == content:
+            return False
+        private_write(path, content)
+        self.command("connection", "load", str(path))
+        return True
 
     def add_candidate(self, credentials):
         profile_uuid = str(uuid.uuid4())
@@ -259,6 +290,13 @@ class HotspotDNS:
         self.config = config
         self.runtime_dir = Path(runtime_dir)
         self.process = None
+        self.portal_url = None
+
+    def set_https(self, active):
+        url = f"https://{https_hostname(self.config['https_hostname'])}/captive-portal/api" if active else None
+        if url != self.portal_url:
+            self.stop()
+            self.portal_url = url
 
     def start(self):
         if self.process is not None and self.process.poll() is None:
@@ -270,7 +308,8 @@ class HotspotDNS:
                       "dhcp-range=192.168.4.20,192.168.4.200,255.255.255.0,1h\n"
                       "dhcp-option=3,192.168.4.1\ndhcp-option=6,192.168.4.1\n"
                       f"dhcp-leasefile={self.runtime_dir}/dnsmasq.leases\n"
-                      "dhcp-authoritative\nuser=nobody\ngroup=nogroup\n")
+                      "dhcp-authoritative\nuser=nobody\ngroup=nogroup\n"
+                      + (f"dhcp-option-force=114,{self.portal_url}\n" if self.portal_url else ""))
         lease = self.runtime_dir / "dnsmasq.leases"
         lease.touch(mode=0o600, exist_ok=True)
         import pwd
@@ -294,10 +333,15 @@ class HotspotDNS:
 
 
 class Controller:
-    def __init__(self, config, nm, dns, clock=time.monotonic, sleeper=time.sleep, firewall=None):
+    def __init__(self, config, nm, dns, clock=time.monotonic, sleeper=time.sleep, firewall=None,
+                 tls_check=trusted_https_ready):
         self.config, self.nm, self.dns = config, nm, dns
         self.clock, self.sleep = clock, sleeper
         self.firewall = firewall
+        self.tls_check = tls_check
+        self.https_active = False
+        self.protected_ap = True
+        self.last_tls_check = 0
         self.offline_since = None
         self.last_retry = 0
         self.state = "waiting"
@@ -312,7 +356,9 @@ class Controller:
 
     def snapshot(self):
         with self.lock:
-            return {"state": self.state, "message": self.message, "ssid": self.config["ssid"]}
+            setup_url = f"https://{self.config['https_hostname']}/" if self.https_active else f"http://{GATEWAY}/"
+            return {"state": self.state, "message": self.message, "ssid": self.config["ssid"],
+                    "setup_url": setup_url, "password_protected": self.protected_ap}
 
     def submit(self, kind, credentials=None):
         with self.lock:
@@ -322,11 +368,23 @@ class Controller:
             self.set_state("queued", "Connecting… The setup network will disappear briefly. If the connection fails, reconnect to the same Aviary network.")
 
     def start_hotspot(self, message="Choose a Wi-Fi network for Tulip Aviary."):
+        self.set_state("starting", "Starting recovery Wi-Fi…")
         if self.firewall:
             self.firewall.set("hotspot")
+        hostname = self.config.get("https_hostname")
+        https_active = bool(hostname and self.tls_check(hostname))
+        protected_ap = not (self.config.get("open_setup", False) and https_active)
+        self.last_tls_check = self.clock()
+        changed = self.nm.prepare_ap(not protected_ap)
+        if changed and self.nm.status()["uuid"] == self.config["ap_uuid"]:
+            self.dns.stop()
+            self.nm.deactivate_ap()
         if self.nm.status()["uuid"] != self.config["ap_uuid"]:
             self.nm.activate(self.config["ap_uuid"])
+        self.dns.set_https(https_active)
         self.dns.start()
+        with self.lock:
+            self.https_active, self.protected_ap = https_active, protected_ap
         self.last_retry = self.clock()
         self.set_state("hotspot", message)
         LOG.info("Recovery hotspot is available")
@@ -391,6 +449,10 @@ class Controller:
         if status["connected"] and status["uuid"] == self.config["ap_uuid"]:
             if self.state not in {"hotspot", "queued"}:
                 self.start_hotspot()
+            elif self.https_active and now - self.last_tls_check >= 300:
+                self.last_tls_check = now
+                if not self.tls_check(self.config["https_hostname"]):
+                    self.start_hotspot("Protected recovery Wi-Fi is available. Use the setup password supplied with your Aviary.")
             else:
                 self.dns.start()  # Restart a failed DHCP process without dropping the AP.
             try:
@@ -417,19 +479,24 @@ class Controller:
             self.start_hotspot()
 
 
-def allowed_request(headers):
+def allowed_request(headers, config=None):
     try:
+        hosts = HOSTS | ({config["https_hostname"]} if config and config.get("https_hostname") else set())
         authority = headers.get("Host", "")
         host = urlsplit("http://" + authority).hostname
-        if authority not in HOSTS and authority not in {f"{name}:80" for name in HOSTS}:
+        scheme = headers.get("X-Aviary-Setup-Scheme", "http")
+        if scheme not in {"http", "https"}:
+            return False
+        port = 443 if scheme == "https" else 80
+        if authority not in hosts and authority not in {f"{name}:{port}" for name in hosts}:
             return False
         address = ipaddress.ip_address(headers.get("X-Aviary-Client-IP", ""))
         origin = headers.get("Origin")
         if origin:
             parsed = urlsplit(origin)
-            if parsed.scheme != "http" or parsed.hostname != host or parsed.port not in {None, 80}:
+            if parsed.scheme != scheme or parsed.hostname != host or parsed.port not in {None, port}:
                 return False
-        return host in HOSTS and address in NETWORK
+        return host in hosts and address in NETWORK
     except ValueError:
         return False
 
@@ -461,7 +528,7 @@ small{{color:#496452}}.status{{background:#eff3ed;border-radius:8px;padding:12px
 <label><input type="checkbox" name="hidden" value="yes"> Hidden network</label>
 <button>Connect and save</button></form>
 <form method="post" action="/retry"><input type="hidden" name="csrf" value="{token}"><button>Try saved networks</button></form>
-<p><small>If connecting fails, rejoin this same Aviary hotspot and open <b>http://192.168.4.1</b>. Your saved networks are kept.</small></p></main></html>'''
+<p><small>If connecting fails, rejoin this same Aviary hotspot and open <b>{html.escape(state['setup_url'])}</b>. Your saved networks are kept.</small></p></main></html>'''
 
 
 class Portal(http.server.BaseHTTPRequestHandler):
@@ -481,15 +548,20 @@ class Portal(http.server.BaseHTTPRequestHandler):
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Referrer-Policy", "no-referrer")
         self.send_header("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'")
+        if self.headers.get("X-Aviary-Setup-Scheme") == "https":
+            self.send_header("Strict-Transport-Security", "max-age=86400")
         self.end_headers()
         self.wfile.write(content)
 
     def available(self):
-        if not allowed_request(self.headers):
+        if not allowed_request(self.headers, self.server.controller.config):
             self.respond(403, "Setup is available only on the Aviary recovery network.")
             return False
         if self.server.controller.snapshot()["state"] not in {"hotspot", "queued", "connecting"}:
             self.respond(503, "Recovery Wi-Fi is not active.")
+            return False
+        if not self.server.controller.protected_ap and not self.server.controller.https_active:
+            self.respond(503, "Secure setup is not ready.")
             return False
         return True
 
@@ -497,12 +569,20 @@ class Portal(http.server.BaseHTTPRequestHandler):
         if not self.available():
             return
         host = urlsplit("http://" + self.headers["Host"]).hostname
-        if host not in {GATEWAY, "aviary.setup"}:
+        controller = self.server.controller
+        if controller.https_active and (host != controller.config["https_hostname"]
+                                       or self.headers.get("X-Aviary-Setup-Scheme") != "https"):
+            self.respond(302, "Open the secure Aviary Wi-Fi setup page.", location=controller.snapshot()["setup_url"])
+            return
+        if not controller.https_active and host not in {GATEWAY, "aviary.setup"}:
             # A redirect from the phone's connectivity probe opens its captive
             # portal. Use a canonical local origin for the actual setup form.
             self.respond(302, "Open the Aviary Wi-Fi setup page.", location=f"http://{GATEWAY}/")
             return
-        if self.path == "/status":
+        if self.path == "/captive-portal/api" and controller.https_active:
+            self.respond(200, json.dumps({"captive": True, "user-portal-url": controller.snapshot()["setup_url"]}),
+                         "application/captive+json")
+        elif self.path == "/status":
             self.respond(200, json.dumps(self.server.controller.snapshot()), "application/json")
         else:
             self.respond(200, page(self.server.controller))
@@ -519,6 +599,11 @@ class Portal(http.server.BaseHTTPRequestHandler):
         if not self.available():
             return
         controller = self.server.controller
+        if ((controller.https_active or not controller.protected_ap)
+                and (self.headers.get("X-Aviary-Setup-Scheme") != "https"
+                     or urlsplit("http://" + self.headers["Host"]).hostname != controller.config.get("https_hostname"))):
+            self.respond(403, "Reload the secure setup page before entering Wi-Fi credentials.")
+            return
         try:
             if self.headers.get("Content-Type", "").split(";", 1)[0] != "application/x-www-form-urlencoded":
                 raise ValueError("Invalid setup request.")
@@ -563,6 +648,18 @@ def default_config():
     password = "-".join("".join(secrets.choice(alphabet) for _ in range(4)) for _ in range(3))
     return {"interface": "wlan0", "ssid": f"Aviary_{suffix}", "password": password,
             "ap_uuid": str(uuid.uuid4()), "channel": 6, "grace_seconds": 60, "retry_seconds": 300}
+
+
+def load_or_create_config():
+    STATE_DIR.mkdir(mode=0o700, parents=True, exist_ok=True)
+    os.chmod(STATE_DIR, 0o700)
+    path = STATE_DIR / "config.json"
+    if not path.exists():
+        config = default_config()
+        profiles = NetworkManager.command("-t", "-f", "UUID,TYPE", "connection", "show")
+        config["trusted_uuids"] = [line.split(":")[0] for line in profiles.splitlines() if line.endswith(":802-11-wireless")]
+        private_write(path, json.dumps(config, indent=2) + "\n")
+    return json.loads(path.read_text())
 
 
 def main():

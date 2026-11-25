@@ -30,6 +30,8 @@ class FakeNM:
         self.removed = []
         self.committed = []
         self.has_clients = False
+        self.ap_open = False
+        self.prepared_modes = []
 
     def status(self):
         return {"uuid": self.current or "", "connected": self.current is not None}
@@ -40,6 +42,16 @@ class FakeNM:
         if profile_uuid in self.fail:
             raise RuntimeError("failed")
         self.current = profile_uuid
+
+    def prepare_ap(self, open_setup):
+        self.prepared_modes.append(open_setup)
+        changed = self.ap_open != open_setup
+        self.ap_open = open_setup
+        return changed
+
+    def deactivate_ap(self):
+        if self.current == CONFIG["ap_uuid"]:
+            self.current = None
 
     def add_candidate(self, credentials):
         self.credentials = credentials
@@ -64,6 +76,10 @@ class FakeNM:
 class FakeDNS:
     def __init__(self):
         self.running = False
+        self.https = False
+
+    def set_https(self, active):
+        self.https = active
 
     def start(self):
         self.running = True
@@ -175,6 +191,33 @@ class BehaviorTests(unittest.TestCase):
         self.controller.submit("retry")
         self.controller.tick()
         self.assertEqual(self.controller.state, "hotspot")
+
+    def test_passwordless_ap_requires_valid_trusted_certificate(self):
+        config = {**CONFIG, "https_hostname": "setup.example.net", "open_setup": True}
+        for valid in (True, False):
+            with self.subTest(valid=valid):
+                controller = recovery.Controller(config, self.nm, self.dns, tls_check=lambda _: valid)
+                controller.start_hotspot()
+                self.assertEqual(self.nm.ap_open, valid)
+                self.assertEqual(controller.protected_ap, not valid)
+                self.assertEqual(controller.https_active, valid)
+                self.assertEqual(controller.state, "hotspot")
+
+    def test_expiring_certificate_switches_open_ap_to_protected_recovery(self):
+        config = {**CONFIG, "https_hostname": "setup.example.net", "open_setup": True}
+        valid = True
+        controller = recovery.Controller(config, self.nm, self.dns, clock=lambda: self.now,
+                                         tls_check=lambda _: valid)
+        controller.start_hotspot()
+        self.assertTrue(self.nm.ap_open)
+        valid = False
+        self.now = 300
+        controller.tick()
+        self.assertFalse(self.nm.ap_open)
+        self.assertTrue(controller.protected_ap)
+        self.assertFalse(controller.https_active)
+        self.assertFalse(self.dns.https)
+        self.assertEqual(controller.snapshot()["setup_url"], "http://192.168.4.1/")
 
 
 class CredentialTests(unittest.TestCase):
@@ -349,6 +392,51 @@ class HTTPTests(unittest.TestCase):
 
     def test_inactive_recovery_is_not_available(self):
         self.controller.set_state("connected", "Connected")
+        self.assertEqual(self.request()[0], 503)
+
+    def enable_https(self):
+        self.controller.config = {**CONFIG, "https_hostname": "setup.example.net", "open_setup": True}
+        self.controller.https_active = True
+        self.controller.protected_ap = False
+
+    def test_https_setup_never_serves_the_form_over_http(self):
+        self.enable_https()
+        for host in ("192.168.4.1", "captive.apple.com", "setup.example.net"):
+            status, body, headers = self.request(headers={"Host": host})
+            self.assertEqual(status, 302)
+            self.assertEqual(headers["Location"], "https://setup.example.net/")
+            self.assertNotIn("name=\"password\"", body)
+        fields = {"csrf": self.controller.csrf, "ssid": "New", "password": "a-password"}
+        self.assertEqual(self.request("POST", "/connect", fields)[0], 403)
+        self.assertTrue(self.controller.jobs.empty())
+
+    def test_valid_https_form_and_submission(self):
+        self.enable_https()
+        headers = {"Host": "setup.example.net", "X-Aviary-Setup-Scheme": "https", "Origin": "https://setup.example.net"}
+        status, body, response_headers = self.request(headers=headers)
+        self.assertEqual(status, 200)
+        self.assertIn("Connect and save", body)
+        self.assertIn("Strict-Transport-Security", response_headers)
+        fields = {"csrf": self.controller.csrf, "ssid": "New", "password": "a-password"}
+        self.assertEqual(self.request("POST", "/connect", fields, headers)[0], 202)
+        self.assertEqual(self.controller.jobs.qsize(), 1)
+
+    def test_https_origin_cannot_be_downgraded(self):
+        self.enable_https()
+        headers = {"Host": "setup.example.net", "X-Aviary-Setup-Scheme": "https", "Origin": "http://setup.example.net"}
+        self.assertEqual(self.request(headers=headers)[0], 403)
+
+    def test_standard_captive_portal_api_requires_https(self):
+        self.enable_https()
+        headers = {"Host": "setup.example.net", "X-Aviary-Setup-Scheme": "https"}
+        status, body, response_headers = self.request(path="/captive-portal/api", headers=headers)
+        self.assertEqual(status, 200)
+        self.assertEqual(response_headers["Content-Type"], "application/captive+json")
+        self.assertEqual(json.loads(body), {"captive": True, "user-portal-url": "https://setup.example.net/"})
+        self.assertEqual(self.request(path="/captive-portal/api")[0], 302)
+
+    def test_no_plaintext_form_on_an_unprotected_ap_without_https(self):
+        self.controller.protected_ap = False
         self.assertEqual(self.request()[0], 503)
 
 

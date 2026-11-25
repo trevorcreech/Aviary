@@ -18,11 +18,19 @@ independently of whether the hotspot requires a Wi-Fi password. The popup still
 depends on the phone's captive-network detection and saved network preferences;
 the manual address remains available if it does not open.
 
+With trusted HTTPS enabled, DHCP option 114 also advertises the standard
+HTTPS captive portal API (`/captive-portal/api`, RFC 8908/8910). It reports the
+secure setup URL directly to compatible phones. Legacy HTTP probes redirect
+to that same HTTPS URL. The credentials form is never served or accepted over
+plain HTTP while the hotspot is open.
+
 The hotspot disappears while Aviary tries the new network. A successful
 connection is saved with autoconnect enabled and priority 50. On failure, only
 the new candidate profile is removed and the same setup hotspot returns.
 Existing profiles are never overwritten or deleted. Rejoin the hotspot to try
-again. On the regular Wi-Fi, Aviary is available at **http://aviary.local**.
+again. On pre-existing trusted Wi-Fi profiles, Aviary is available at
+**http://aviary.local**. Networks added through passwordless setup retain the
+inbound restrictions described below; use the owner's Cloudflare sign-in there.
 
 While the recovery hotspot has no associated devices, Aviary tries saved
 autoconnect networks every five minutes, in NetworkManager priority order.
@@ -61,7 +69,8 @@ NetworkManager keyfiles and never passed in process arguments or logged.
   and HTTP setup server, supervised by `aviary-wifi-recovery.service`.
 - `/var/lib/aviary-wifi-recovery/config.json`: stable AP credentials and timing.
 - `/etc/NetworkManager/system-connections/aviary-recovery.nmconnection`: explicit
-  activation only, 2.4 GHz WPA2, `192.168.4.1/24`, no default route.
+  activation only, 2.4 GHz, `192.168.4.1/24`, no default route. Protected by
+  WPA2 by default, with an optional HTTPS-only open mode.
 - A private dnsmasq instance supplies DHCP and wildcard DNS only while the AP
   is active. It does not share an upstream Internet connection.
 - An nftables table restricts the recovery interface to DHCP, DNS and the setup
@@ -78,23 +87,76 @@ NetworkManager keyfiles and never passed in process arguments or logged.
 
 ### Open setup is not enabled by default
 
-The root configuration supports `open_setup: true` for evaluation. In this mode,
+The HTTPS configuration command supports enabling passwordless setup after a
+publicly trusted local certificate is available. In this mode,
 newly provisioned profiles keep inbound Wi-Fi access blocked, including after
 reboot; only the pre-existing `trusted_uuids` regain normal LAN access. Cloudflare
 continues through Pi-initiated connections. This prevents a setup user from
 moving the Pi onto their own router and directly reading its LAN dashboard.
 
-**That isolation alone does not make open setup private.** The setup form uses
-HTTP, so an open hotspot exposes submitted Wi-Fi credentials to nearby
-eavesdroppers. In particular, exposing the password for an existing trusted
-network could give them access to its normal LAN services. Keep setup protected
-with WPA2 unless trusted HTTPS and device authentication are added, or the owner
-explicitly accepts this exposure. No password or saved credentials are returned
-by the setup endpoints.
+The controller opens the hotspot only when Caddy has a locally cached,
+publicly trusted certificate valid for at least ten more minutes. All setup
+requests redirect to the configured HTTPS hostname; plain HTTP submissions
+are rejected. The listener overwrites the backend's trusted transport header.
+No password or saved credentials are returned by the setup endpoints.
+
+If a certificate is missing, untrusted, or nearing expiry after a long offline
+period, recovery switches to the protected WPA2 hotspot and uses the manual
+HTTP address over that encrypted Wi-Fi. The stable fallback password must be
+kept with the device. Certificate renewal uses the Internet while normal Wi-Fi
+works; serving a valid cached certificate does not require Internet access.
+Use the known HTTPS hostname when entering credentials: an open SSID alone
+does not authenticate a device, and an impostor hotspot could present a
+different website.
 
 The service restores a pending candidate after a crash: it commits it if it
 is connected, otherwise removes only that candidate. It resumes an already
 active AP and restarts DHCP/DNS if needed.
+
+## Trusted setup HTTPS
+
+Use a hostname in a domain you control. This is the local hotspot setup page;
+it is not a new publicly accessible dashboard.
+
+```sh
+sudo python3 wifi-recovery/configure_https.py --hostname setup.example.net
+```
+
+This prepares a local HTTPS Caddy listener and a certificate-only loopback
+origin on port 8093, saves a private configuration backup, and reloads Caddy.
+It does not install or switch on the Wi-Fi recovery service. In your existing
+Cloudflare tunnel, add a published application route with:
+
+- Hostname: `setup.example.net`
+- Service URL: `http://localhost:8093`
+- Path: blank
+- Certificate validation must be reachable without a Cloudflare Access login.
+
+The port 8093 listener only proxies GET/HEAD requests for strict ACME challenge
+paths to Caddy's HTTP challenge handler. Every other route returns 404, as do
+unknown challenge tokens. It never proxies the setup page, normal dashboard,
+recordings or administration endpoints. No Cloudflare DNS API key is required
+on the Pi. Caddy obtains and renews the certificate through this route.
+
+After the route resolves and issuance succeeds, this command verifies the
+cached certificate against the system trust store before enabling open mode:
+
+```sh
+sudo python3 wifi-recovery/configure_https.py --hostname setup.example.net --open-setup
+sudo python3 wifi-recovery/install.py
+```
+
+On the hotspot, wildcard DNS resolves the HTTPS hostname directly to the Pi at
+192.168.4.1, so TLS terminates locally even without upstream connectivity. The
+same hostname's public Cloudflare route only exposes certificate validation.
+If needed after creating the route, force a Caddy reload to retry issuance:
+
+```sh
+sudo caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile --force
+```
+
+The HTTPS configuration script also supports `--staging` for issuance tests.
+A staging certificate is deliberately untrusted and cannot enable open setup.
 
 ## Check and disable
 
@@ -127,3 +189,13 @@ SSID. An isolated network namespace verified DHCP offers, wildcard DNS, the
 setup page, forged-host rejection, inaccessible data/SSH/stream ports, IPv6
 blocking, and new-network inbound isolation. These checks did not change
 `wlan0` or install the service. Physical hotspot and reconnect tests remain.
+
+The HTTPS extension passed 32 unit/HTTP tests on both Mac and Pi. A virtual
+DHCP client received option 114 with the correct HTTPS API URL; protected
+fallback removed that advertisement. An isolated TLS client verified the HTTPS
+form with a private test certificate, rejection by the normal public trust
+store, HTTP-to-HTTPS probe redirects, and restriction of the certificate-only
+origin. Test keys, interfaces, firewall tables and servers were removed. The
+production certificate still requires the owner's tunnel route and successful
+public CA validation; these tests do not establish a publicly trusted live
+certificate or a phone's actual popup behavior.

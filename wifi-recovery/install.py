@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
 """Install without interrupting the current Wi-Fi connection. Run as root."""
 
-import json
 import os
 from pathlib import Path
 import shutil
 import subprocess
 import sys
 
-from recovery import STATE_DIR, PROFILE_DIR, ap_profile, default_config, private_write
+from recovery import STATE_DIR, NetworkManager, load_or_create_config, trusted_https_ready
 
 
 def run(*args):
@@ -24,18 +23,11 @@ def main():
     source = Path(__file__).resolve().parent
     destination = Path("/usr/local/lib/aviary-wifi-recovery")
     destination.mkdir(mode=0o755, parents=True, exist_ok=True)
-    STATE_DIR.mkdir(mode=0o700, parents=True, exist_ok=True)
-    os.chmod(STATE_DIR, 0o700)
     config_path = STATE_DIR / "config.json"
-    if not config_path.exists():
-        config = default_config()
-        profiles = subprocess.check_output(["/usr/bin/nmcli", "-t", "-f", "UUID,TYPE", "connection", "show"], text=True)
-        config["trusted_uuids"] = [line.split(":")[0] for line in profiles.splitlines() if line.endswith(":802-11-wireless")]
-        private_write(config_path, json.dumps(config, indent=2) + "\n")
-    config = json.loads(config_path.read_text())
-    profile_path = PROFILE_DIR / "aviary-recovery.nmconnection"
-    private_write(profile_path, ap_profile(config))
-    run("/usr/bin/nmcli", "connection", "load", str(profile_path))
+    config = load_or_create_config()
+    open_setup = bool(config.get("open_setup") and config.get("https_hostname")
+                      and trusted_https_ready(config["https_hostname"]))
+    NetworkManager(config).prepare_ap(open_setup)
     for name in ("recovery.py", "install.py"):
         shutil.copyfile(source / name, destination / name)
         os.chmod(destination / name, 0o644)
