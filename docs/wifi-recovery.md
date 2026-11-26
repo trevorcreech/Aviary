@@ -14,9 +14,12 @@ HTTP inside the encrypted WPA2 Wi-Fi connection. It needs no Internet, public
 DNS hostname, TLS certificate, certificate renewal or Cloudflare setup route.
 A phone may report that the network has no Internet; stay connected for setup.
 
-Select or type the home Wi-Fi network, enter its password and choose **Connect
-and save**. The hotspot disappears while Aviary tries the connection. A
-successful connection is saved for future use. If it fails, the same hotspot
+Select or type the home Wi-Fi network, enter its password and choose **Save
+Credentials**. Use **Enter network name manually** for a hidden network. The
+password eye button reveals or hides what you typed. Open networks need no
+password. All page assets are local, so setup works offline. The hotspot
+disappears while Aviary tries the connection. A successful connection is saved
+for future use. If it fails, the same hotspot
 returns with the same passphrase; existing profiles are retained. Personal
 WPA/WPA2, hidden and open home networks are supported; enterprise authentication
 and WPA3-only home networks are not supported by the form.

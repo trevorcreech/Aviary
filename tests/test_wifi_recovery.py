@@ -414,7 +414,7 @@ class HTTPTests(unittest.TestCase):
                 self.assertEqual(headers["Location"], "http://192.168.4.1/")
                 status, body, _ = self.request()
                 self.assertEqual(status, 200)
-                self.assertIn("Connect and save", body)
+                self.assertIn("Save Credentials", body)
 
     def test_lan_public_and_unexpected_host_cannot_access_setup(self):
         for headers in ({"X-Aviary-Client-IP": "192.168.1.83"}, {"X-Aviary-Client-IP": "8.8.8.8"},
@@ -467,6 +467,39 @@ class HTTPTests(unittest.TestCase):
         self.assertTrue(state["password_protected"])
         self.assertNotIn(CONFIG["password"], body)
         self.assertNotIn("Strict-Transport-Security", headers)
+
+    def test_selected_network_uses_scanned_security(self):
+        self.controller.nm.scan = lambda: [{"ssid": "Home", "secure": True}]
+        fields = {"csrf": self.controller.csrf, "ssid": "Home", "password": "", "mode": "scan"}
+        self.assertEqual(self.request("POST", "/connect", fields)[0], 400)
+        self.assertTrue(self.controller.jobs.empty())
+        self.controller.nm.scan = lambda: [{"ssid": "Home", "secure": False}]
+        self.assertEqual(self.request("POST", "/connect", fields)[0], 202)
+        self.assertEqual(self.controller.jobs.get_nowait(), ("connect", ("Home", "", "open", False)))
+
+    def test_manual_entry_supports_hidden_networks_without_extra_controls(self):
+        _, body, _ = self.request(path="/?manual=1")
+        self.assertIn('name="mode" value="manual"', body)
+        self.assertNotIn('<select id="ssid"', body)
+        fields = {"csrf": self.controller.csrf, "ssid": "Hidden", "password": "passphrase", "mode": "manual"}
+        self.assertEqual(self.request("POST", "/connect", fields)[0], 202)
+        self.assertEqual(self.controller.jobs.get_nowait(), ("connect", ("Hidden", "passphrase", "wpa", True)))
+
+    def test_scan_error_does_not_queue_a_connection(self):
+        self.controller.nm.scan = lambda: (_ for _ in ()).throw(RuntimeError())
+        fields = {"csrf": self.controller.csrf, "ssid": "Home", "password": "passphrase", "mode": "scan"}
+        status, body, _ = self.request("POST", "/connect", fields)
+        self.assertEqual(status, 400)
+        self.assertIn("Enter the network name manually", body)
+        self.assertTrue(self.controller.jobs.empty())
+
+    def test_local_script_has_the_same_access_boundary(self):
+        status, body, headers = self.request(path="/setup.js")
+        self.assertEqual(status, 200)
+        self.assertTrue(headers["Content-Type"].startswith("text/javascript"))
+        self.assertIn("script-src 'self'", headers["Content-Security-Policy"])
+        self.assertIn('password.type', body)
+        self.assertEqual(self.request(path="/setup.js", headers={"X-Aviary-Client-IP": "192.168.1.83"})[0], 403)
 
 
 if __name__ == "__main__":

@@ -86,7 +86,7 @@ def main():
         ap_path = Path("/etc/NetworkManager/system-connections/aviary-recovery.nmconnection")
         write(ap_path, ap_profile(config).encode(), 0o600)
         NetworkManager.command("connection", "load", str(ap_path))
-        for name in ("recovery.py", "install.py", "eff-wordlist.txt", "WORDLIST-LICENSE.txt"):
+        for name in ("recovery.py", "install.py", "setup.js", "eff-wordlist.txt", "WORDLIST-LICENSE.txt"):
             write(destination / name, (source / name).read_bytes())
         for name in ("aviary-wifi-recovery.service", "aviary-wifi-guard.service"):
             write(Path("/etc/systemd/system") / name, (source / name).read_bytes())

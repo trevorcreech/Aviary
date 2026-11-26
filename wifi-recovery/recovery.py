@@ -463,34 +463,61 @@ def allowed_request(headers):
         return False
 
 
-def page(controller, error=""):
+def page(controller, error="", manual=False):
     state = controller.snapshot()
     try:
         networks = controller.nm.scan()
     except RuntimeError:
         networks = []
-    choices = "".join(f'<option value="{html.escape(row["ssid"], quote=True)}"></option>' for row in networks)
+    manual = manual or not networks
+    choices = "".join(f'<option value="{html.escape(row["ssid"], quote=True)}" '
+                      f'data-secure="{str(row["secure"]).lower()}">{html.escape(row["ssid"])}</option>'
+                      for row in networks)
     token = html.escape(controller.csrf, quote=True)
-    message = html.escape(error or state["message"])
-    return f'''<!doctype html><html lang="en"><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1"><title>Aviary Wi-Fi setup</title>
-<style>body{{font:17px system-ui,sans-serif;background:#eff3ed;color:#173127;margin:0;padding:24px}}
-main{{max-width:440px;margin:20px auto;background:white;border-radius:20px;padding:28px}}
-h1{{margin:0 0 8px;font-size:28px}}p{{line-height:1.5}}label{{display:block;margin-top:20px}}
-input,select,button{{box-sizing:border-box;width:100%;font:inherit;padding:12px;border:1px solid #99ab9d;border-radius:8px;margin-top:6px}}
-button{{background:#22583e;color:white;border:0;margin-top:24px;cursor:pointer}}input[type=checkbox]{{width:auto}}
-small{{color:#496452}}.status{{background:#eff3ed;border-radius:8px;padding:12px}}</style>
-<main><h1>Tulip Aviary</h1><small>Wi-Fi setup · {html.escape(state['ssid'])}</small>
-<p class="status" role="status">{message}</p>
-<form method="post" action="/connect"><input type="hidden" name="csrf" value="{token}">
-<label for="ssid">Wi-Fi network name</label><input id="ssid" name="ssid" list="networks" required autocomplete="off" maxlength="32">
-<datalist id="networks">{choices}</datalist>
-<label for="security">Security</label><select id="security" name="security"><option value="wpa">Password protected (WPA/WPA2 personal)</option><option value="open">Open network</option></select>
-<label for="password">Wi-Fi password</label><input id="password" type="password" name="password" autocomplete="new-password" maxlength="63">
-<label><input type="checkbox" name="hidden" value="yes"> Hidden network</label>
-<button>Connect and save</button></form>
-<form method="post" action="/retry"><input type="hidden" name="csrf" value="{token}"><button>Try saved networks</button></form>
-<p><small>If connecting fails, rejoin this same Aviary hotspot and open <b>{html.escape(state['setup_url'])}</b>. Your saved networks are kept.</small></p></main></html>'''
+    busy = state["state"] != "hotspot"
+    message = error or state["message"]
+    initial_messages = {"Choose a Wi-Fi network for Tulip Aviary.", "Choose Wi-Fi"}
+    notice = (f'<p class="status" role="status">{html.escape(message)}</p>'
+              if error or message not in initial_messages else "")
+    if manual:
+        network_field = ('<input id="ssid" name="ssid" placeholder="Enter network name" required '
+                         'autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="32">')
+        toggle = '<a class="switch" href="/">Select a nearby WiFi network</a>' if networks else ''
+    else:
+        network_field = ('<div class="select-wrap"><select id="ssid" name="ssid" required>'
+                         '<option value="" disabled selected>Select your WiFi network</option>'
+                         + choices + '</select><svg aria-hidden="true" viewBox="0 0 24 24">'
+                         '<path d="m7 10 5 5 5-5"/></svg></div>')
+        toggle = '<a class="switch" href="/?manual=1">Enter network name manually</a>'
+    return f'''<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1"><title>Set Up WiFi · Tulip Aviary</title>
+<style>
+:root{{color-scheme:light;--accent:#ad8b5b;--ink:#2b2e29;--muted:#8b8d87;--field:#f7f6f2}}
+*{{box-sizing:border-box}}body{{font:16px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f5f5f0;color:var(--ink);margin:0;padding:28px 18px;min-height:100vh;display:grid;place-items:center}}
+main{{width:100%;max-width:440px;background:#fff;border-radius:24px;padding:38px 38px 30px;box-shadow:0 8px 28px #272e2410;text-align:center}}
+.wifi-icon{{display:grid;place-items:center;width:80px;height:80px;margin:0 auto 22px;background:#e9e0d7;border-radius:50%;color:var(--accent)}}
+svg{{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}}.wifi-icon svg{{width:36px;height:36px}}
+h1{{font-size:28px;letter-spacing:-.5px;margin:0 0 34px;font-weight:650}}fieldset{{border:0;padding:0;margin:0;min-width:0;text-align:left}}label{{display:block;margin:24px 0 10px;font-weight:500}}label:first-child{{margin-top:0}}
+input,select,button{{font:inherit}}input,select{{width:100%;height:56px;border:1px solid transparent;border-radius:13px;background:var(--field);padding:0 16px;color:var(--ink)}}input::placeholder{{color:#a6a49c;opacity:1}}input:focus,select:focus{{outline:2px solid var(--accent);outline-offset:2px}}
+.select-wrap,.password-wrap{{position:relative}}select{{appearance:none;padding-right:44px;cursor:pointer}}.select-wrap>svg{{position:absolute;right:15px;top:16px;color:#aaa595;pointer-events:none}}
+.switch{{display:block;text-align:center;color:#987847;font-size:14px;text-decoration:none;margin:17px 0 28px}}a:hover,.retry:hover{{text-decoration:underline}}.password-wrap input{{padding-left:45px;padding-right:49px}}.password-wrap>.lock{{position:absolute;left:16px;top:17px;width:21px;height:21px;color:#96988f}}
+.reveal{{position:absolute;right:5px;top:5px;width:44px;height:46px;padding:10px;background:transparent;border:0;color:#8b8d87;cursor:pointer}}[hidden]{{display:none!important}}
+.save{{width:100%;padding:17px 12px;margin-top:38px;border:0;border-radius:13px;background:var(--accent);color:white;font-weight:600;cursor:pointer}}button:focus-visible,a:focus-visible{{outline:2px solid var(--accent);outline-offset:4px}}button:disabled{{opacity:.65;cursor:default}}
+.hint{{font-size:14px;line-height:1.45;color:var(--muted);margin:25px 0 16px}}.field-hint{{font-size:13px;color:var(--muted);margin:9px 0 0;line-height:1.4}}.retry{{color:#987847;font-size:14px;border:0;background:transparent;padding:8px;cursor:pointer}}.status{{background:var(--field);border-radius:12px;padding:14px;font-size:14px;line-height:1.5;margin:-12px 0 26px}}
+@media(max-width:360px){{body{{padding:16px 12px}}main{{padding:30px 23px 24px}}h1{{font-size:26px}}}}
+</style><script src="/setup.js" defer></script></head><body>
+<main aria-label="Tulip Aviary WiFi setup"><div class="wifi-icon"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M4 11a20 20 0 0 1 24 0M8 16a13.5 13.5 0 0 1 16 0M12 21a7 7 0 0 1 8 0"/><circle cx="16" cy="26" r="1.3" fill="currentColor" stroke="none"/></svg></div>
+<h1>Set Up WiFi</h1>{notice}
+<form method="post" action="/connect"><input type="hidden" name="csrf" value="{token}"><input type="hidden" name="mode" value="{'manual' if manual else 'scan'}">
+<fieldset {'disabled' if busy else ''}><label for="ssid">Network Name (SSID)</label>{network_field}{toggle}
+<div id="password-field"><label for="password">WiFi Password</label><div class="password-wrap"><svg class="lock" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
+<input id="password" type="password" name="password" placeholder="Enter WiFi password" autocomplete="new-password" autocapitalize="none" spellcheck="false" maxlength="63">
+<button class="reveal" type="button" aria-label="Show password" aria-pressed="false" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg></button></div>
+{'<p class="field-hint">Leave blank for an open network.</p>' if manual else ''}</div><p id="open-network" class="field-hint" hidden>This network does not need a password.</p>
+<button class="save">Save Credentials</button></fieldset></form>
+<p class="hint">Make sure Tulip Aviary is within range of<br>your WiFi router.</p>
+<form method="post" action="/retry"><input type="hidden" name="csrf" value="{token}"><button class="retry" {'disabled' if busy else ''}>Try saved networks</button></form>
+</main></body></html>'''
 
 
 class Portal(http.server.BaseHTTPRequestHandler):
@@ -509,7 +536,7 @@ class Portal(http.server.BaseHTTPRequestHandler):
             self.send_header("Location", location)
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Referrer-Policy", "no-referrer")
-        self.send_header("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'")
+        self.send_header("Content-Security-Policy", "default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'")
         self.end_headers()
         self.wfile.write(content)
 
@@ -535,10 +562,12 @@ class Portal(http.server.BaseHTTPRequestHandler):
             # portal. Use a canonical local origin for the actual setup form.
             self.respond(302, "Open the Aviary Wi-Fi setup page.", location=f"http://{GATEWAY}/")
             return
-        if self.path == "/status":
+        if self.path == "/setup.js":
+            self.respond(200, Path(__file__).with_name("setup.js").read_text(), "text/javascript; charset=utf-8")
+        elif self.path == "/status":
             self.respond(200, json.dumps(self.server.controller.snapshot()), "application/json")
         else:
-            self.respond(200, page(self.server.controller))
+            self.respond(200, page(controller, manual=parse_qs(urlsplit(self.path).query).get("manual") == ["1"]))
 
     def do_POST(self):
         try:
@@ -555,6 +584,7 @@ class Portal(http.server.BaseHTTPRequestHandler):
         if urlsplit("http://" + self.headers["Host"]).hostname not in {GATEWAY, "aviary.setup"}:
             self.respond(403, "Reload the setup page before entering Wi-Fi credentials.")
             return
+        fields = {}
         try:
             if self.headers.get("Content-Type", "").split(";", 1)[0] != "application/x-www-form-urlencoded":
                 raise ValueError("Invalid setup request.")
@@ -566,8 +596,21 @@ class Portal(http.server.BaseHTTPRequestHandler):
                 self.respond(403, "Reload the setup page and try again.")
                 return
             if self.path == "/connect":
-                credentials = validate_credentials(fields.get("ssid", ""), fields.get("password", ""),
-                                                   fields.get("security", "wpa"), fields.get("hidden") == "yes")
+                ssid, password = fields.get("ssid", ""), fields.get("password", "")
+                mode = fields.get("mode", "manual")
+                if mode not in {"scan", "manual"}:
+                    raise ValueError("Choose a WiFi network or enter its name manually.")
+                secure = bool(password)
+                if mode == "scan":
+                    try:
+                        networks = controller.nm.scan()
+                    except RuntimeError:
+                        raise ValueError("Networks could not be checked. Enter the network name manually.") from None
+                    selected = next((row for row in networks if row["ssid"] == ssid), None)
+                    if selected is None:
+                        raise ValueError("That network is no longer listed. Enter its name manually.")
+                    secure = selected["secure"]
+                credentials = validate_credentials(ssid, password, "wpa" if secure else "open", mode == "manual")
                 controller.submit("connect", credentials)
             elif self.path == "/retry":
                 controller.submit("retry")
@@ -575,7 +618,7 @@ class Portal(http.server.BaseHTTPRequestHandler):
                 self.respond(404, "Not found.")
                 return
         except (ValueError, UnicodeError) as exc:
-            self.respond(400, page(controller, str(exc)))
+            self.respond(400, page(controller, str(exc), manual=fields.get("mode") == "manual"))
             return
         self.respond(202, page(controller))
 
