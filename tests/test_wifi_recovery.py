@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import socket
 import stat
+import sys
 import tempfile
 import threading
 import unittest
@@ -16,9 +17,13 @@ from urllib.parse import urlencode
 SPEC = importlib.util.spec_from_file_location("recovery", Path(__file__).resolve().parents[1] / "wifi-recovery/recovery.py")
 recovery = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(recovery)
+INSTALL_SPEC = importlib.util.spec_from_file_location("wifi_install", Path(__file__).resolve().parents[1] / "wifi-recovery/install.py")
+installer = importlib.util.module_from_spec(INSTALL_SPEC)
+with patch.dict(sys.modules, {"recovery": recovery}):
+    INSTALL_SPEC.loader.exec_module(installer)
 
 CONFIG = {"ap_uuid": "11111111-1111-4111-8111-111111111111", "interface": "wlan0",
-          "ssid": "Aviary_ABCD", "password": "test-password", "grace_seconds": 60, "retry_seconds": 300}
+          "ssid": "Aviary Setup", "password": "test-password", "grace_seconds": 60, "retry_seconds": 300}
 
 
 class FakeNM:
@@ -43,10 +48,10 @@ class FakeNM:
             raise RuntimeError("failed")
         self.current = profile_uuid
 
-    def prepare_ap(self, open_setup):
-        self.prepared_modes.append(open_setup)
-        changed = self.ap_open != open_setup
-        self.ap_open = open_setup
+    def prepare_ap(self):
+        self.prepared_modes.append(False)
+        changed = self.ap_open
+        self.ap_open = False
         return changed
 
     def deactivate_ap(self):
@@ -76,10 +81,6 @@ class FakeNM:
 class FakeDNS:
     def __init__(self):
         self.running = False
-        self.https = False
-
-    def set_https(self, active):
-        self.https = active
 
     def start(self):
         self.running = True
@@ -192,35 +193,37 @@ class BehaviorTests(unittest.TestCase):
         self.controller.tick()
         self.assertEqual(self.controller.state, "hotspot")
 
-    def test_passwordless_ap_requires_valid_trusted_certificate(self):
+    def test_upgrade_reconnects_a_legacy_open_ap_with_password_protection(self):
         config = {**CONFIG, "https_hostname": "setup.example.net", "open_setup": True}
-        for valid in (True, False):
-            with self.subTest(valid=valid):
-                controller = recovery.Controller(config, self.nm, self.dns, tls_check=lambda _: valid)
-                controller.start_hotspot()
-                self.assertEqual(self.nm.ap_open, valid)
-                self.assertEqual(controller.protected_ap, not valid)
-                self.assertEqual(controller.https_active, valid)
-                self.assertEqual(controller.state, "hotspot")
-
-    def test_expiring_certificate_switches_open_ap_to_protected_recovery(self):
-        config = {**CONFIG, "https_hostname": "setup.example.net", "open_setup": True}
-        valid = True
-        controller = recovery.Controller(config, self.nm, self.dns, clock=lambda: self.now,
-                                         tls_check=lambda _: valid)
+        self.nm.current = CONFIG["ap_uuid"]
+        self.nm.ap_open = True
+        controller = recovery.Controller(config, self.nm, self.dns)
         controller.start_hotspot()
-        self.assertTrue(self.nm.ap_open)
-        valid = False
-        self.now = 300
-        controller.tick()
         self.assertFalse(self.nm.ap_open)
         self.assertTrue(controller.protected_ap)
-        self.assertFalse(controller.https_active)
-        self.assertFalse(self.dns.https)
+        self.assertEqual(self.nm.activations, [CONFIG["ap_uuid"]])
         self.assertEqual(controller.snapshot()["setup_url"], "http://192.168.4.1/")
 
 
 class CredentialTests(unittest.TestCase):
+    def test_setup_passphrase_is_three_words_and_fits_wpa(self):
+        password = recovery.generate_setup_password()
+        words = password.split("-")
+        self.assertEqual(len(words), 3)
+        self.assertTrue(all(3 <= len(word) <= 8 and word.isalpha() and word.islower() for word in words))
+        recovery.validate_credentials("Aviary Setup", password, "wpa", False)
+        self.assertEqual(recovery.default_config()["ssid"], "Aviary Setup")
+
+    def test_missing_or_truncated_wordlist_fails_instead_of_weak_password(self):
+        with patch.object(Path, "read_text", return_value="11111 acorn\n11112 maple\n"):
+            with self.assertRaises(RuntimeError):
+                recovery.generate_setup_password()
+
+    def test_hotspot_cannot_be_opened_with_a_legacy_flag_or_empty_password(self):
+        self.assertIn("key-mgmt=wpa-psk", recovery.ap_profile({**CONFIG, "open_setup": True}))
+        with self.assertRaises(ValueError):
+            recovery.ap_profile({**CONFIG, "password": ""})
+
     def test_profile_injection_and_special_ssids(self):
         value = recovery.client_profile("test-uuid", "12;34; café", "pass\\word ;=", "wpa", True)
         encoded = "".join(f"{byte};" for byte in "12;34; café".encode())
@@ -270,6 +273,41 @@ class CredentialTests(unittest.TestCase):
                 nm.remove_candidate("existing-home-network")
 
 
+class InstallerTests(unittest.TestCase):
+    def test_migration_preserves_password_profiles_and_trust(self):
+        old = {**CONFIG, "ssid": "Aviary_ABCD", "open_setup": True,
+               "https_hostname": "setup.example.net", "trusted_uuids": ["parents"]}
+        new = installer.migrate_config(old)
+        self.assertEqual(new["ssid"], "Aviary Setup")
+        self.assertEqual(new["password"], old["password"])
+        self.assertEqual(new["ap_uuid"], old["ap_uuid"])
+        self.assertEqual(new["trusted_uuids"], ["parents"])
+        self.assertNotIn("open_setup", new)
+        self.assertNotIn("https_hostname", new)
+        self.assertTrue(old["open_setup"])
+
+    def test_explicit_rotation_replaces_only_setup_secret(self):
+        with patch.object(installer, "generate_setup_password", return_value="acorn-maple-velvet"):
+            new = installer.migrate_config(CONFIG, rotate_password=True)
+        self.assertEqual(new["password"], "acorn-maple-velvet")
+        self.assertEqual(new["ap_uuid"], CONFIG["ap_uuid"])
+
+    def test_certificate_cleanup_is_limited_to_retired_hostname(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            retired = root / "certificates/issuer/setup.example.net"
+            other = root / "certificates/issuer/other.example.net"
+            for path in (retired, other):
+                path.mkdir(parents=True)
+                (path / "test.key").write_text("test fixture")
+            with patch.object(installer, "Path", return_value=root):
+                installer.remove_certificate("setup.example.net")
+            self.assertFalse(retired.exists())
+            self.assertTrue((other / "test.key").exists())
+        with self.assertRaises(ValueError):
+            installer.remove_certificate("../other")
+
+
 class FirewallTests(unittest.TestCase):
     def test_hotspot_redirects_web_blocks_other_services_and_forwarding(self):
         rules = recovery.Firewall(CONFIG).rules("hotspot")
@@ -280,15 +318,23 @@ class FirewallTests(unittest.TestCase):
         self.assertNotIn("dport 22 accept", rules)
         self.assertNotIn("flush ruleset", rules)
 
-    def test_open_setup_new_network_remains_isolated(self):
-        config = {**CONFIG, "open_setup": True, "trusted_uuids": ["parents"]}
+    def test_password_protected_setup_new_network_remains_isolated(self):
+        config = {**CONFIG, "trusted_uuids": ["parents"]}
         firewall = recovery.Firewall(config)
         modes = []
         firewall.set = modes.append
         firewall.connected("new-network")
         firewall.connected("parents")
         self.assertEqual(modes, ["untrusted", "trusted"])
-        self.assertNotIn("[wifi-security]", recovery.ap_profile(config))
+        self.assertIn("[wifi-security]", recovery.ap_profile(config))
+        self.assertNotIn("443", firewall.rules("hotspot"))
+
+    def test_missing_trust_list_fails_closed(self):
+        firewall = recovery.Firewall(CONFIG)
+        modes = []
+        firewall.set = modes.append
+        firewall.connected("unknown-network")
+        self.assertEqual(modes, ["untrusted"])
 
     def test_bad_interface_cannot_inject_firewall_rules(self):
         with self.assertRaises(ValueError):
@@ -324,6 +370,7 @@ class HTTPTests(unittest.TestCase):
         self.directory = tempfile.TemporaryDirectory()
         self.socket_path = str(Path(self.directory.name) / "portal.sock")
         self.controller = recovery.Controller(CONFIG, FakeNM(), FakeDNS())
+        self.controller.protected_ap = True
         self.controller.set_state("hotspot", "Choose Wi-Fi")
         self.server = recovery.UnixServer(self.socket_path, recovery.Portal)
         self.server.controller = self.controller
@@ -394,50 +441,32 @@ class HTTPTests(unittest.TestCase):
         self.controller.set_state("connected", "Connected")
         self.assertEqual(self.request()[0], 503)
 
-    def enable_https(self):
-        self.controller.config = {**CONFIG, "https_hostname": "setup.example.net", "open_setup": True}
-        self.controller.https_active = True
-        self.controller.protected_ap = False
-
-    def test_https_setup_never_serves_the_form_over_http(self):
-        self.enable_https()
-        for host in ("192.168.4.1", "captive.apple.com", "setup.example.net"):
-            status, body, headers = self.request(headers={"Host": host})
-            self.assertEqual(status, 302)
-            self.assertEqual(headers["Location"], "https://setup.example.net/")
-            self.assertNotIn("name=\"password\"", body)
-        fields = {"csrf": self.controller.csrf, "ssid": "New", "password": "a-password"}
-        self.assertEqual(self.request("POST", "/connect", fields)[0], 403)
-        self.assertTrue(self.controller.jobs.empty())
-
-    def test_valid_https_form_and_submission(self):
-        self.enable_https()
-        headers = {"Host": "setup.example.net", "X-Aviary-Setup-Scheme": "https", "Origin": "https://setup.example.net"}
-        status, body, response_headers = self.request(headers=headers)
-        self.assertEqual(status, 200)
-        self.assertIn("Connect and save", body)
-        self.assertIn("Strict-Transport-Security", response_headers)
-        fields = {"csrf": self.controller.csrf, "ssid": "New", "password": "a-password"}
-        self.assertEqual(self.request("POST", "/connect", fields, headers)[0], 202)
-        self.assertEqual(self.controller.jobs.qsize(), 1)
-
-    def test_https_origin_cannot_be_downgraded(self):
-        self.enable_https()
-        headers = {"Host": "setup.example.net", "X-Aviary-Setup-Scheme": "https", "Origin": "http://setup.example.net"}
-        self.assertEqual(self.request(headers=headers)[0], 403)
-
-    def test_standard_captive_portal_api_requires_https(self):
-        self.enable_https()
-        headers = {"Host": "setup.example.net", "X-Aviary-Setup-Scheme": "https"}
-        status, body, response_headers = self.request(path="/captive-portal/api", headers=headers)
-        self.assertEqual(status, 200)
-        self.assertEqual(response_headers["Content-Type"], "application/captive+json")
-        self.assertEqual(json.loads(body), {"captive": True, "user-portal-url": "https://setup.example.net/"})
-        self.assertEqual(self.request(path="/captive-portal/api")[0], 302)
-
-    def test_no_plaintext_form_on_an_unprotected_ap_without_https(self):
+    def test_no_form_before_password_protected_ap_is_ready(self):
         self.controller.protected_ap = False
         self.assertEqual(self.request()[0], 503)
+
+    def test_connectivity_probe_origins_cannot_submit_credentials(self):
+        fields = {"csrf": self.controller.csrf, "ssid": "New", "password": "a-password"}
+        headers = {"Host": "captive.apple.com", "Origin": "http://captive.apple.com"}
+        self.assertEqual(self.request("POST", "/connect", fields, headers)[0], 403)
+        self.assertTrue(self.controller.jobs.empty())
+
+    def test_https_origin_cannot_submit_to_http_setup(self):
+        fields = {"csrf": self.controller.csrf, "ssid": "New", "password": "a-password"}
+        self.assertEqual(self.request("POST", "/connect", fields,
+                                      {"Origin": "https://192.168.4.1"})[0], 403)
+
+    def test_retired_public_hostname_cannot_access_setup(self):
+        self.assertEqual(self.request(headers={"Host": "aviary-setup.cree.ch"})[0], 403)
+
+    def test_status_has_local_url_but_no_setup_password(self):
+        status, body, headers = self.request(path="/status")
+        self.assertEqual(status, 200)
+        state = json.loads(body)
+        self.assertEqual(state["setup_url"], "http://192.168.4.1/")
+        self.assertTrue(state["password_protected"])
+        self.assertNotIn(CONFIG["password"], body)
+        self.assertNotIn("Strict-Transport-Security", headers)
 
 
 if __name__ == "__main__":
