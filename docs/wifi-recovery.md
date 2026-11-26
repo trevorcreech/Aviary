@@ -188,7 +188,7 @@ profile variants without activation, and round-tripped a Unicode/semicolon
 SSID. An isolated network namespace verified DHCP offers, wildcard DNS, the
 setup page, forged-host rejection, inaccessible data/SSH/stream ports, IPv6
 blocking, and new-network inbound isolation. These checks did not change
-`wlan0` or install the service. Physical hotspot and reconnect tests remain.
+`wlan0` or install the service.
 
 The HTTPS extension passed 32 unit/HTTP tests on both Mac and Pi. A virtual
 DHCP client received option 114 with the correct HTTPS API URL; protected
@@ -196,6 +196,10 @@ fallback removed that advertisement. An isolated TLS client verified the HTTPS
 form with a private test certificate, rejection by the normal public trust
 store, HTTP-to-HTTPS probe redirects, and restriction of the certificate-only
 origin. Test keys, interfaces, firewall tables and servers were removed. The
-production certificate still requires the owner's tunnel route and successful
-public CA validation; these tests do not establish a publicly trusted live
-certificate or a phone's actual popup behavior.
+production deployment then obtained a publicly trusted Let's Encrypt certificate
+and verified it directly against the system trust store. A timed physical radio
+test disconnected the working Wi-Fi, observed automatic recovery AP mode and
+a healthy HTTPS setup backend, then restored the original profile. No phone
+associated during that window, so the actual phone popup remains unverified.
+The original website, tunnel and recording services were healthy afterward;
+both boot units passed `systemd-analyze verify`.
