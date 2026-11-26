@@ -155,6 +155,8 @@ class NetworkManager:
         self.interface = config["interface"]
         self.profile_dir = Path(profile_dir)
         self.pending_path = Path(state_dir) / "pending.json"
+        self.networks = []
+        self.scan_lock = threading.Lock()
 
     @staticmethod
     def command(*arguments, timeout=15):
@@ -258,17 +260,31 @@ class NetworkManager:
         except (OSError, subprocess.TimeoutExpired):
             return True
 
-    def scan(self):
+    def scan(self, refresh=False):
         networks = {}
-        for line in self.command("-t", "--escape", "no", "-f", "SSID,SIGNAL,SECURITY", "device", "wifi", "list",
-                                 "ifname", self.interface, "--rescan", "no").splitlines():
+        try:
+            output = self.command("-t", "--escape", "no", "-f", "SSID,SIGNAL,SECURITY", "device", "wifi", "list",
+                                  "ifname", self.interface, "--rescan", "yes" if refresh else "no")
+        except RuntimeError:
+            with self.scan_lock:
+                if self.networks:
+                    return list(self.networks)
+            raise
+        for line in output.splitlines():
             try:
                 ssid, strength, security = line.rsplit(":", 2)
-                if ssid and ssid != self.config["ssid"]:
-                    networks[ssid] = {"ssid": ssid, "signal": int(strength), "secure": security not in {"", "--"}}
+                strength = int(strength)
+                if (ssid and ssid != self.config["ssid"] and
+                        (ssid not in networks or strength > networks[ssid]["signal"])):
+                    networks[ssid] = {"ssid": ssid, "signal": strength, "secure": security not in {"", "--"}}
             except ValueError:
                 continue
-        return sorted(networks.values(), key=lambda row: -row["signal"])
+        with self.scan_lock:
+            # The single radio may lose NetworkManager's scan results in AP mode.
+            # Keep the scan captured before the switch for the form and submission.
+            if networks:
+                self.networks = sorted(networks.values(), key=lambda row: -row["signal"])
+            return list(self.networks)
 
 
 class HotspotDNS:
@@ -350,6 +366,10 @@ class Controller:
             self.dns.stop()
             self.nm.deactivate_ap()
         if self.nm.status()["uuid"] != self.config["ap_uuid"]:
+            try:
+                self.nm.scan(refresh=True)
+            except RuntimeError:
+                LOG.info("Nearby Wi-Fi scan unavailable; manual entry remains available")
             self.nm.activate(self.config["ap_uuid"])
         self.dns.start()
         with self.lock:
@@ -535,7 +555,9 @@ class Portal(http.server.BaseHTTPRequestHandler):
         if location is not None:
             self.send_header("Location", location)
         self.send_header("X-Content-Type-Options", "nosniff")
-        self.send_header("Referrer-Policy", "no-referrer")
+        # no-referrer makes a normal HTML form POST send Origin: null, which
+        # conflicts with our same-origin check. Keep the origin on local forms.
+        self.send_header("Referrer-Policy", "same-origin")
         self.send_header("Content-Security-Policy", "default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'")
         self.end_headers()
         self.wfile.write(content)

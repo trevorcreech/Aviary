@@ -121,6 +121,10 @@ sudo journalctl -u aviary-wifi-recovery
 Tests cover recovery timing, saved-network retention/retries, failed candidate
 rollback, crash recovery, passphrase bounds, WPA2-only profiles, inbound data
 isolation, Host/source/Origin/CSRF boundaries and native captive redirects.
+The controller scans before switching the single radio into AP mode and retains
+the results for network selection and validation if NetworkManager clears its
+scan cache. The form uses `Referrer-Policy: same-origin`; `no-referrer` would make
+normal browser form submissions send `Origin: null` and fail the origin check.
 Validate actual Caddy, nftables and inactive NetworkManager profiles on the Pi
 before deployment. Coordinate a physical radio test with the owner and arm an
 independent restore timer before intentionally disconnecting remote Wi-Fi.

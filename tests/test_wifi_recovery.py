@@ -37,6 +37,7 @@ class FakeNM:
         self.has_clients = False
         self.ap_open = False
         self.prepared_modes = []
+        self.scans = []
 
     def status(self):
         return {"uuid": self.current or "", "connected": self.current is not None}
@@ -74,7 +75,8 @@ class FakeNM:
     def clients(self):
         return self.has_clients
 
-    def scan(self):
+    def scan(self, refresh=False):
+        self.scans.append(refresh)
         return [{"ssid": '<script>"&', "signal": 80, "secure": True}]
 
 
@@ -185,6 +187,21 @@ class BehaviorTests(unittest.TestCase):
         self.controller.tick()
         self.assertTrue(self.dns.running)
         self.assertEqual(self.nm.activations, [])
+        self.assertEqual(self.nm.scans, [])
+
+    def test_hotspot_scans_before_switching_the_radio(self):
+        events = []
+        scan, activate = self.nm.scan, self.nm.activate
+        self.nm.scan = lambda refresh=False: (events.append(("scan", refresh)), scan(refresh))[1]
+        self.nm.activate = lambda profile_uuid: (events.append(("activate", profile_uuid)), activate(profile_uuid))[1]
+        self.hotspot()
+        self.assertEqual(events, [("scan", True), ("activate", CONFIG["ap_uuid"])])
+
+    def test_scan_failure_still_allows_hotspot_and_manual_entry(self):
+        self.nm.scan = lambda **_: (_ for _ in ()).throw(RuntimeError())
+        self.hotspot()
+        self.assertTrue(self.controller.protected_ap)
+        self.assertEqual(self.controller.state, "hotspot")
 
     def test_explicit_retry_with_no_saved_profiles_remains_available(self):
         self.hotspot()
@@ -203,6 +220,30 @@ class BehaviorTests(unittest.TestCase):
         self.assertTrue(controller.protected_ap)
         self.assertEqual(self.nm.activations, [CONFIG["ap_uuid"]])
         self.assertEqual(controller.snapshot()["setup_url"], "http://192.168.4.1/")
+
+
+class ScanTests(unittest.TestCase):
+    def test_dropdown_survives_networkmanager_clearing_results_in_ap_mode(self):
+        nm = recovery.NetworkManager(CONFIG)
+        results = iter(["Home:40:WPA2\nHome:75:WPA2\nGuest:60:--\nAviary Setup:100:WPA2", "", ""])
+        nm.command = lambda *_, **__: next(results)
+        expected = [{"ssid": "Home", "signal": 75, "secure": True},
+                    {"ssid": "Guest", "signal": 60, "secure": False}]
+        self.assertEqual(nm.scan(refresh=True), expected)
+        controller = recovery.Controller(CONFIG, nm, FakeDNS())
+        controller.set_state("hotspot", "Choose Wi-Fi")
+        body = recovery.page(controller)
+        self.assertIn('<select id="ssid"', body)
+        self.assertIn('value="Home"', body)
+        self.assertNotIn('name="mode" value="manual"', body)
+        self.assertEqual(nm.scan(), expected)
+
+    def test_cached_scan_handles_driver_scan_errors(self):
+        nm = recovery.NetworkManager(CONFIG)
+        nm.command = lambda *_, **__: "Home:75:WPA2"
+        expected = nm.scan(refresh=True)
+        nm.command = lambda *_, **__: (_ for _ in ()).throw(RuntimeError())
+        self.assertEqual(nm.scan(), expected)
 
 
 class CredentialTests(unittest.TestCase):
@@ -403,6 +444,7 @@ class HTTPTests(unittest.TestCase):
         self.assertNotIn('<script>"&', body)
         self.assertIn("&lt;script&gt;&quot;&amp;", body)
         self.assertEqual(headers["Cache-Control"], "no-store")
+        self.assertEqual(headers["Referrer-Policy"], "same-origin")
 
     def test_phone_connectivity_checks_redirect_to_setup(self):
         for host, path in [("captive.apple.com", "/hotspot-detect.html"),
@@ -455,6 +497,11 @@ class HTTPTests(unittest.TestCase):
         fields = {"csrf": self.controller.csrf, "ssid": "New", "password": "a-password"}
         self.assertEqual(self.request("POST", "/connect", fields,
                                       {"Origin": "https://192.168.4.1"})[0], 403)
+
+    def test_opaque_origin_cannot_bypass_the_same_origin_check(self):
+        fields = {"csrf": self.controller.csrf, "ssid": "New", "password": "a-password"}
+        self.assertEqual(self.request("POST", "/connect", fields, {"Origin": "null"})[0], 403)
+        self.assertTrue(self.controller.jobs.empty())
 
     def test_retired_public_hostname_cannot_access_setup(self):
         self.assertEqual(self.request(headers={"Host": "aviary-setup.cree.ch"})[0], 403)
