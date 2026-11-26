@@ -200,6 +200,14 @@ production deployment then obtained a publicly trusted Let's Encrypt certificate
 and verified it directly against the system trust store. A timed physical radio
 test disconnected the working Wi-Fi, observed automatic recovery AP mode and
 a healthy HTTPS setup backend, then restored the original profile. No phone
-associated during that window, so the actual phone popup remains unverified.
+associated during that first window, so it did not verify the phone popup.
 The original website, tunnel and recording services were healthy afterward;
 both boot units passed `systemd-analyze verify`.
+
+A second coordinated physical test passed iPhone captive-portal acceptance.
+The owner joined the passwordless hotspot and the native captive window opened
+the Tulip Aviary form at the expected HTTPS hostname. They reported an initial
+loading delay and supplied screenshots. The Pi recorded a DHCP lease and the
+independent timer restored the original Wi-Fi profile; existing services were
+healthy and no test timers remained. This check viewed the form without
+submitting new Wi-Fi credentials.
