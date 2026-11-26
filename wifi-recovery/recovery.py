@@ -492,18 +492,18 @@ def page(controller, error="", manual=False):
     return f'''<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1"><title>Set Up WiFi · Tulip Aviary</title>
 <style>
-:root{{color-scheme:light;--accent:#ad8b5b;--ink:#2b2e29;--muted:#8b8d87;--field:#f7f6f2}}
-*{{box-sizing:border-box}}body{{font:16px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f5f5f0;color:var(--ink);margin:0;padding:28px 18px;min-height:100vh;display:grid;place-items:center}}
+:root{{color-scheme:light;--accent:#234f3d;--ink:#20382c;--muted:#66776b;--field:#f1f5f1}}
+*{{box-sizing:border-box}}body{{font:16px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#edf2ed;color:var(--ink);margin:0;padding:28px 18px;min-height:100vh;display:grid;place-items:center}}
 main{{width:100%;max-width:440px;background:#fff;border-radius:24px;padding:38px 38px 30px;box-shadow:0 8px 28px #272e2410;text-align:center}}
-.wifi-icon{{display:grid;place-items:center;width:80px;height:80px;margin:0 auto 22px;background:#e9e0d7;border-radius:50%;color:var(--accent)}}
+.wifi-icon{{display:grid;place-items:center;width:80px;height:80px;margin:0 auto 22px;background:#dce8de;border-radius:50%;color:var(--accent)}}
 svg{{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}}.wifi-icon svg{{width:36px;height:36px}}
 h1{{font-size:28px;letter-spacing:-.5px;margin:0 0 34px;font-weight:650}}fieldset{{border:0;padding:0;margin:0;min-width:0;text-align:left}}label{{display:block;margin:24px 0 10px;font-weight:500}}label:first-child{{margin-top:0}}
-input,select,button{{font:inherit}}input,select{{width:100%;height:56px;border:1px solid transparent;border-radius:13px;background:var(--field);padding:0 16px;color:var(--ink)}}input::placeholder{{color:#a6a49c;opacity:1}}input:focus,select:focus{{outline:2px solid var(--accent);outline-offset:2px}}
-.select-wrap,.password-wrap{{position:relative}}select{{appearance:none;padding-right:44px;cursor:pointer}}.select-wrap>svg{{position:absolute;right:15px;top:16px;color:#aaa595;pointer-events:none}}
-.switch{{display:block;text-align:center;color:#987847;font-size:14px;text-decoration:none;margin:17px 0 28px}}a:hover,.retry:hover{{text-decoration:underline}}.password-wrap input{{padding-left:45px;padding-right:49px}}.password-wrap>.lock{{position:absolute;left:16px;top:17px;width:21px;height:21px;color:#96988f}}
-.reveal{{position:absolute;right:5px;top:5px;width:44px;height:46px;padding:10px;background:transparent;border:0;color:#8b8d87;cursor:pointer}}[hidden]{{display:none!important}}
+input,select,button{{font:inherit}}input,select{{width:100%;height:56px;border:1px solid transparent;border-radius:13px;background:var(--field);padding:0 16px;color:var(--ink)}}input::placeholder{{color:#7a897e;opacity:1}}input:focus,select:focus{{outline:2px solid var(--accent);outline-offset:2px}}
+.select-wrap,.password-wrap{{position:relative}}select{{appearance:none;padding-right:44px;cursor:pointer}}.select-wrap>svg{{position:absolute;right:15px;top:16px;color:#718375;pointer-events:none}}
+.switch{{display:block;text-align:center;color:var(--accent);font-size:14px;text-decoration:none;margin:17px 0 28px}}a:hover,.retry:hover{{text-decoration:underline}}.password-wrap input{{padding-left:45px;padding-right:49px}}.password-wrap>.lock{{position:absolute;left:16px;top:17px;width:21px;height:21px;color:#718375}}
+.reveal{{position:absolute;right:5px;top:5px;width:44px;height:46px;padding:10px;background:transparent;border:0;color:#66776b;cursor:pointer}}[hidden]{{display:none!important}}
 .save{{width:100%;padding:17px 12px;margin-top:38px;border:0;border-radius:13px;background:var(--accent);color:white;font-weight:600;cursor:pointer}}button:focus-visible,a:focus-visible{{outline:2px solid var(--accent);outline-offset:4px}}button:disabled{{opacity:.65;cursor:default}}
-.hint{{font-size:14px;line-height:1.45;color:var(--muted);margin:25px 0 16px}}.field-hint{{font-size:13px;color:var(--muted);margin:9px 0 0;line-height:1.4}}.retry{{color:#987847;font-size:14px;border:0;background:transparent;padding:8px;cursor:pointer}}.status{{background:var(--field);border-radius:12px;padding:14px;font-size:14px;line-height:1.5;margin:-12px 0 26px}}
+.hint{{font-size:14px;line-height:1.45;color:var(--muted);margin:25px 0 16px}}.field-hint{{font-size:13px;color:var(--muted);margin:9px 0 0;line-height:1.4}}.retry{{color:var(--accent);font-size:14px;border:0;background:transparent;padding:8px;cursor:pointer}}.status{{background:var(--field);border-radius:12px;padding:14px;font-size:14px;line-height:1.5;margin:-12px 0 26px}}
 @media(max-width:360px){{body{{padding:16px 12px}}main{{padding:30px 23px 24px}}h1{{font-size:26px}}}}
 </style><script src="/setup.js" defer></script></head><body>
 <main aria-label="Tulip Aviary WiFi setup"><div class="wifi-icon"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M4 11a20 20 0 0 1 24 0M8 16a13.5 13.5 0 0 1 16 0M12 21a7 7 0 0 1 8 0"/><circle cx="16" cy="26" r="1.3" fill="currentColor" stroke="none"/></svg></div>
