@@ -1,0 +1,13 @@
+[Unit]
+Description=Block inbound Aviary Wi-Fi until its network is classified
+Before=NetworkManager.service
+After=local-fs.target
+DefaultDependencies=no
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /usr/local/lib/aviary-wifi-recovery/recovery.py --guard
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

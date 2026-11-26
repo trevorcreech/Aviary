@@ -1,0 +1,12 @@
+EFF's Long Wordlist, by Joseph Bonneau / Electronic Frontier Foundation.
+Source: https://www.eff.org/files/2016/07/18/eff_large_wordlist.txt
+Documentation: https://www.eff.org/dice
+EFF copyright policy: https://www.eff.org/copyright
+License: Creative Commons Attribution 4.0 International (CC BY 4.0).
+https://creativecommons.org/licenses/by/4.0/
+
+eff-wordlist.txt is included unchanged. The generator selects only lowercase
+ASCII words of 3 through 8 letters. The resulting vocabulary contains 6,216
+words. At the owner's request, this family device uses three independent
+uniform choices (approximately 37.8 bits of entropy), separated by hyphens.
+Passphrases are 11 to 26 characters long and fit the WPA2 length limit.
